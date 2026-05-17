@@ -1,0 +1,23 @@
+{
+  "list": {
+    "domains": [
+      {
+        "id": "be3833d6-38be-4172-9701-d10c4dddef5f",
+        "domain": "datenagent.com",
+        "addedAt": "2026-05-16T12:07:19.646Z"
+      },
+      {
+        "id": "0c28dbe9-b22f-42ff-bbb5-19d2edec9f4b",
+        "domain": "meineschufa.de",
+        "addedAt": "2026-05-16T12:07:19.646Z"
+      },
+      {
+        "id": "1e0cfc54-a888-4533-8e7c-008b44fcc2bb",
+        "domain": "schufa.de",
+        "addedAt": "2026-05-16T12:07:19.646Z"
+      }
+    ],
+    "createdAt": "2026-05-16T11:53:18.593Z",
+    "updatedAt": "2026-05-16T14:20:53.543Z"
+  }
+}
