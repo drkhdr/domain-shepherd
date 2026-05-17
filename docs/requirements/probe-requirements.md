@@ -67,3 +67,7 @@ This document is the formal behavior contract for probe logic.
 - User-configured parked patterns must support an optional NS SLD filter and a required response regex.
 - A parked pattern must match only when the regex matches response body text and, if NS SLD is specified, one DNS name server SLD matches.
 - Invalid regex patterns or empty regex values must be ignored safely without failing a probe.
+
+## REQ-PROBE-017 .info WHOIS Parity Stability
+- Node and Rust runtimes must produce parity-compatible WHOIS outcomes for `.info` domains in parity regression tests.
+- Rust WHOIS/RDAP fallback behavior must not fail solely because an RDAP endpoint responds with HTTP redirects that Node follows successfully.

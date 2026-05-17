@@ -4,9 +4,10 @@ use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
+use reqwest::Client;
+use reqwest::header::USER_AGENT;
 
-use super::constants::{WHOIS_PRIMARY_SERVER, WHOIS_TIMEOUT_MS, WhoisOverrides};
-use super::http::build_http_client;
+use super::constants::{APP_USER_AGENT, REQUEST_TIMEOUT_MS, WHOIS_PRIMARY_SERVER, WHOIS_TIMEOUT_MS, WhoisOverrides};
 use super::types::WhoisResult;
 use super::util::{
     clean_whois_response, dedupe_strings_sorted, find_whois_field, find_whois_fields, find_whois_name_servers,
@@ -199,7 +200,7 @@ async fn query_whois_server(server: &str, query: &str) -> Result<String, String>
             .await
             .map_err(|e| format!("WHOIS read failed ({server}): {e}"))?;
 
-        String::from_utf8(buffer).map_err(|e| format!("WHOIS utf8 decode failed ({server}): {e}"))
+        Ok(String::from_utf8_lossy(&buffer).into_owned())
     };
 
     match timeout(Duration::from_millis(WHOIS_TIMEOUT_MS), op).await {
@@ -208,8 +209,19 @@ async fn query_whois_server(server: &str, query: &str) -> Result<String, String>
     }
 }
 
+fn build_rdap_client() -> Result<Client, String> {
+    let mut default_headers = reqwest::header::HeaderMap::new();
+    default_headers.insert(USER_AGENT, reqwest::header::HeaderValue::from_static(APP_USER_AGENT));
+
+    Client::builder()
+        .timeout(std::time::Duration::from_millis(REQUEST_TIMEOUT_MS))
+        .default_headers(default_headers)
+        .build()
+        .map_err(|e| format!("HTTP client build failed: {e}"))
+}
+
 async fn fetch_rdap(domain: &str) -> WhoisResult {
-    let client = match build_http_client() {
+    let client = match build_rdap_client() {
         Ok(client) => client,
         Err(error) => {
             return WhoisResult {

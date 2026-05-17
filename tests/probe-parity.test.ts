@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict'
-import { execFile, execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import path from 'node:path'
-import { promisify } from 'node:util'
 import test from 'node:test'
 
 import { runProbeBatch } from '../src/lib/probe-runtime'
 import type { ProbeDomainInput, ProbeResult } from '../src/lib/probe'
-
-const execFileAsync = promisify(execFile)
 
 const PARITY_DOMAINS: ProbeDomainInput[] = [
   { id: 'd1', domain: 'schufa.de' },
@@ -128,5 +125,27 @@ test('REQ-PROBE-011: node and rust probe runtimes stay parity-compatible', async
     mismatches.length,
     0,
     `Parity mismatches detected:\n${mismatches.map((entry) => `- ${entry}`).join('\n')}`
+  )
+})
+
+test('REQ-PROBE-017: .info WHOIS parity avoids RDAP redirect-only errors', async () => {
+  const domains: ProbeDomainInput[] = [{ id: 'info-1', domain: 'deineschufa.info' }]
+  const [nodeResults, rustResults] = await Promise.all([runProbeBatch(domains), runRustParityProbe(domains)])
+
+  assert.equal(nodeResults.length, 1)
+  assert.equal(rustResults.length, 1)
+
+  const nodeWhoisError = nodeResults[0].whois?.error || ''
+  const rustWhoisError = rustResults[0].whois?.error || ''
+
+  assert.equal(
+    rustWhoisError,
+    nodeWhoisError,
+    `WHOIS error mismatch for .info domain: node=${nodeWhoisError || '<none>'} rust=${rustWhoisError || '<none>'}`
+  )
+  assert.equal(
+    /rdap\.org http 302 found|www\.rdap\.net http 302 found/i.test(rustWhoisError),
+    false,
+    `Unexpected RDAP redirect-only WHOIS error for .info domain: ${rustWhoisError}`
   )
 })
