@@ -80,3 +80,7 @@ This document is the formal behavior contract for probe logic.
 ## REQ-PROBE-019 Restore Default Settings
 - Restoring default settings in the settings dialog must reset probe batch concurrency, probe max attempts, and parked patterns to the shared application defaults.
 - The restore operation must repopulate the default parked patterns even if the draft settings were previously cleared or edited.
+
+## REQ-PROBE-020 Table Filter Scope and Target Status Filter
+- The free-text table search filter must match only against table Domain and Target values.
+- Additional table filters must support filtering by Target status class (`none`, `2xx`, `3xx`, `4xx`, `5xx`) and NS SLD.

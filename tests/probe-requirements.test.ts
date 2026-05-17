@@ -10,7 +10,9 @@ import {
   formatProbeProgress,
   getDefaultParkedPatterns,
   getNameServerSld,
+  matchesDomainTargetSearchFilter,
   matchesConfiguredParkedPatterns,
+  matchesTargetStatusFilter,
   normalizeParkedPatterns,
   PROBE_BATCH_CONCURRENCY_DEFAULT,
   PROBE_MAX_ATTEMPTS_DEFAULT,
@@ -172,4 +174,30 @@ test('REQ-PROBE-019: default probe settings restore concurrency attempts and par
 
   defaults.parkedPatterns[0].responseRegex = 'changed'
   assert.equal(DEFAULT_PARKED_PATTERNS[0].responseRegex, 'Diese neue Domain wurde im Kundenauftrag registriert.')
+})
+
+test('REQ-PROBE-020: table search filter is restricted to domain and target', () => {
+  assert.equal(
+    matchesDomainTargetSearchFilter('example.com', 'https://target.example.com', 'example'),
+    true
+  )
+  assert.equal(
+    matchesDomainTargetSearchFilter('example.com', 'https://target.example.com', 'target'),
+    true
+  )
+  assert.equal(
+    matchesDomainTargetSearchFilter('example.com', 'https://target.example.com', 'clienttransferprohibited'),
+    false
+  )
+})
+
+test('REQ-PROBE-020: target status class filter behavior', () => {
+  assert.equal(matchesTargetStatusFilter(undefined, 'all'), true)
+  assert.equal(matchesTargetStatusFilter(undefined, 'none'), true)
+  assert.equal(matchesTargetStatusFilter(0, 'none'), true)
+  assert.equal(matchesTargetStatusFilter(200, '2xx'), true)
+  assert.equal(matchesTargetStatusFilter(302, '3xx'), true)
+  assert.equal(matchesTargetStatusFilter(404, '4xx'), true)
+  assert.equal(matchesTargetStatusFilter(503, '5xx'), true)
+  assert.equal(matchesTargetStatusFilter(404, '2xx'), false)
 })

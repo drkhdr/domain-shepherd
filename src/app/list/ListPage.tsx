@@ -7,6 +7,8 @@ import {
   createProbeFailureResult,
   formatProbeProgress,
   getPrimaryWhoisStatus,
+  matchesDomainTargetSearchFilter,
+  matchesTargetStatusFilter,
   normalizeParkedPatterns,
   normalizeDomain,
   normalizeProbeBatchConcurrency,
@@ -20,7 +22,7 @@ import {
   getWhoisStatusDefinition,
   getWhoisStatusFamily,
 } from '@/lib/probe'
-import type { ParkedPattern, ProbeDomainInput, ProbeResult, ProbeStatus, SortDirection, SortKey } from '@/lib/probe'
+import type { ParkedPattern, ProbeDomainInput, ProbeResult, ProbeStatus, SortDirection, SortKey, TargetStatusFilter } from '@/lib/probe'
 import {
   APP_NAME,
   APP_VERSION_WITH_GIT,
@@ -728,6 +730,8 @@ export function ListPage() {
   const [sortDir, setSortDir] = useState<SortDirection>('asc')
   const [filterText, setFilterText] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'unprobed' | ProbeStatus>('all')
+  const [targetStatusFilter, setTargetStatusFilter] = useState<TargetStatusFilter>('all')
+  const [nsSldFilter, setNsSldFilter] = useState('all')
   const [expandedProbeId, setExpandedProbeId] = useState('')
   const [newDomainsInput, setNewDomainsInput] = useState('')
   const [settings, setSettings] = useState<ProbeSettings>(createDefaultSettings())
@@ -1164,6 +1168,22 @@ export function ListPage() {
     }))
   }
 
+  const nsSldFilterOptions = useMemo<string[]>(() => {
+    if (!list) {
+      return []
+    }
+
+    const values = new Set<string>()
+    for (const domain of list.domains) {
+      const probe = probeResults[domain.id]
+      for (const sld of getUniqueNameServerSlds(probe)) {
+        values.add(sld)
+      }
+    }
+
+    return Array.from(values).sort((a, b) => a.localeCompare(b))
+  }, [list, probeResults])
+
   const tableRows = useMemo<TableRow[]>(() => {
     if (!list) return []
 
@@ -1198,30 +1218,22 @@ export function ListPage() {
       }
     })
 
-    const query = filterText.trim().toLowerCase()
+    const query = filterText.trim()
     const filteredRows = rows.filter((row) => {
-      const matchesStatus = statusFilter === 'all' || row.status === statusFilter
-      if (!matchesStatus) {
+      const matchesResponseStatus = statusFilter === 'all' || row.status === statusFilter
+      if (!matchesResponseStatus) {
         return false
       }
 
-      if (!query) {
-        return true
+      if (!matchesTargetStatusFilter(row.displayTargetHttpStatus, targetStatusFilter)) {
+        return false
       }
 
-      const haystack = [
-        row.domain,
-        row.target,
-        row.framesetUrl,
-        row.displayTarget,
-        row.whoisStatus,
-        row.whoisStatusInfo.family,
-        row.nsSld,
-        row.status,
-      ]
-        .join(' ')
-        .toLowerCase()
-      return haystack.includes(query)
+      if (nsSldFilter !== 'all' && !row.nsSldList.includes(nsSldFilter)) {
+        return false
+      }
+
+      return matchesDomainTargetSearchFilter(row.domain, row.displayTarget, query)
     })
 
     return [...filteredRows].sort((a, b) => {
@@ -1244,20 +1256,20 @@ export function ListPage() {
           return 0
       }
     })
-  }, [filterText, list, probeResults, sortBy, sortDir, statusFilter])
+  }, [filterText, list, nsSldFilter, probeResults, sortBy, sortDir, statusFilter, targetStatusFilter])
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-[var(--app-content-max-width)]">
-        <div className="mb-6">
+    <main className="h-[calc(100dvh-3.5rem)] overflow-hidden bg-slate-50 p-4 md:p-6">
+      <div className="mx-auto flex h-full min-h-0 max-w-[var(--app-content-max-width)] flex-col">
+        <div className="mb-6 shrink-0">
           <p className="text-slate-600">Track your domain portfolio. No account needed.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div className="mb-4 grid shrink-0 grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <div className="flex gap-2">
               <input
@@ -1315,20 +1327,20 @@ export function ListPage() {
           </div>
         </div>
 
-        <div className="overflow-visible rounded-xl border border-slate-200 bg-white">
-          <div className="grid gap-3 border-b border-slate-200 bg-slate-50 p-3 md:grid-cols-[1fr,220px]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="shrink-0 flex flex-nowrap items-center gap-3 overflow-x-auto border-b border-slate-200 bg-slate-50 p-3">
             <input
               value={filterText}
               onChange={(event) => setFilterText(event.target.value)}
-              placeholder="Filter: domain, target, status, NS SLD"
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              placeholder="Filter: domain, target"
+              className="min-w-[260px] flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             />
             <select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as 'all' | 'unprobed' | ProbeStatus)}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              className="w-44 shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
-              <option value="all">All statuses</option>
+              <option value="all">All response statuses</option>
               <option value="unprobed">Not probed</option>
               <option value="ok">OK</option>
               <option value="redirected">Redirected</option>
@@ -1338,12 +1350,36 @@ export function ListPage() {
               <option value="no-dns">No DNS</option>
               <option value="timeout">Timeout</option>
             </select>
+            <select
+              value={targetStatusFilter}
+              onChange={(event) => setTargetStatusFilter(event.target.value as TargetStatusFilter)}
+              className="w-44 shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            >
+              <option value="all">All target statuses</option>
+              <option value="none">No target status</option>
+              <option value="2xx">Target 2xx</option>
+              <option value="3xx">Target 3xx</option>
+              <option value="4xx">Target 4xx</option>
+              <option value="5xx">Target 5xx</option>
+            </select>
+            <select
+              value={nsSldFilter}
+              onChange={(event) => setNsSldFilter(event.target.value)}
+              className="w-44 shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            >
+              <option value="all">All NS SLDs</option>
+              {nsSldFilterOptions.map((sld) => (
+                <option key={sld} value={sld}>
+                  {sld}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="min-h-0 flex-1 overflow-auto">
             <table className="min-w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-slate-50 text-sm font-semibold text-slate-500">
+              <thead className="sticky top-0 z-10 bg-slate-50">
+                <tr className="text-sm font-semibold text-slate-500">
                   <th className="px-4 py-3 text-left">
                     <button type="button" className="hover:text-slate-800" onClick={() => toggleSort('domain')}>
                       Domain {getSortMarker('domain')}
@@ -1387,8 +1423,8 @@ export function ListPage() {
 
                     return (
                       <Fragment key={row.id}>
-                        <tr className="border-t border-slate-100 align-top">
-                          <td className="px-4 py-2.5">
+                        <tr className="border-t border-slate-100 align-middle">
+                          <td className="px-4 py-2.5 text-sm align-middle">
                             <ExternalLink
                               href={`http://${row.domain}`}
                               className="block max-w-56 truncate font-medium text-blue-600 hover:underline"
@@ -1397,7 +1433,7 @@ export function ListPage() {
                               {row.domain}
                             </ExternalLink>
                           </td>
-                          <td className="px-4 py-2.5">
+                          <td className="px-4 py-2.5 text-sm align-middle">
                             {row.probe ? (
                               <ProbeBadge
                                 result={row.probe}
@@ -1416,7 +1452,7 @@ export function ListPage() {
                               </button>
                             )}
                           </td>
-                          <td className="px-4 py-2.5">
+                          <td className="px-4 py-2.5 text-sm align-middle">
                             {row.displayTarget ? (
                               <div className="inline-flex max-w-full items-center gap-2">
                                 <ExternalLink
@@ -1431,10 +1467,10 @@ export function ListPage() {
                               <span className="text-sm text-slate-400">-</span>
                             )}
                           </td>
-                          <td className="px-4 py-2.5">
+                          <td className="px-4 py-2.5 text-sm align-middle">
                             {row.probe ? <UrlStatusPill code={row.displayTargetHttpStatus} /> : <span className="text-sm text-slate-400">-</span>}
                           </td>
-                          <td className="px-4 py-2.5">
+                          <td className="px-4 py-2.5 text-sm align-middle">
                             {row.whoisStatus ? (
                               <WhoisStatusChip
                                 status={row.whoisStatus}
@@ -1445,7 +1481,7 @@ export function ListPage() {
                               <span className="text-sm text-slate-400">-</span>
                             )}
                           </td>
-                          <td className="px-4 py-2.5">
+                          <td className="px-4 py-2.5 text-sm align-middle">
                             {row.nsSldList.length > 0 ? (
                               <div className="flex max-w-52 flex-wrap gap-1">
                                 {row.nsSldList.map((sld) => (
@@ -1461,7 +1497,7 @@ export function ListPage() {
                               <span className="text-sm text-slate-400">-</span>
                             )}
                           </td>
-                          <td className="px-4 py-2.5">
+                          <td className="px-4 py-2.5 text-sm align-middle">
                             <button
                               type="button"
                               onClick={() => editDomain(row.id, row.domain)}
@@ -1470,7 +1506,7 @@ export function ListPage() {
                               Edit
                             </button>
                           </td>
-                          <td className="px-4 py-2.5">
+                          <td className="px-4 py-2.5 text-sm align-middle">
                             <button
                               type="button"
                               onClick={() => deleteDomain(row.id)}

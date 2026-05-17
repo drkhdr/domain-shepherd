@@ -438,3 +438,44 @@ export function isExplicitRequestTimeoutError(error: unknown): boolean {
   const candidate = error as { name?: unknown }
   return candidate.name === 'TimeoutError'
 }
+
+export type TargetStatusFilter = 'all' | 'none' | '2xx' | '3xx' | '4xx' | '5xx'
+
+export function matchesTargetStatusFilter(statusCode: number | undefined, filter: TargetStatusFilter): boolean {
+  if (filter === 'all') {
+    return true
+  }
+
+  const code = typeof statusCode === 'number' ? statusCode : 0
+  if (filter === 'none') {
+    return code <= 0
+  }
+
+  if (filter === '2xx') {
+    return code >= 200 && code < 300
+  }
+
+  if (filter === '3xx') {
+    return code >= 300 && code < 400
+  }
+
+  if (filter === '4xx') {
+    return code >= 400 && code < 500
+  }
+
+  if (filter === '5xx') {
+    return code >= 500 && code < 600
+  }
+
+  return true
+}
+
+export function matchesDomainTargetSearchFilter(domain: string, target: string, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) {
+    return true
+  }
+
+  const haystack = [domain, target].join(' ').toLowerCase()
+  return haystack.includes(normalizedQuery)
+}
