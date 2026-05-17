@@ -3,9 +3,12 @@ import test from 'node:test'
 
 import {
   classifyProbeStatus,
+  createDefaultProbeSettings,
   createProbeFailureResult,
+  DEFAULT_PARKED_PATTERNS,
   extractFramesetUrl,
   formatProbeProgress,
+  getDefaultParkedPatterns,
   getNameServerSld,
   matchesConfiguredParkedPatterns,
   normalizeParkedPatterns,
@@ -144,4 +147,29 @@ test('REQ-PROBE-016: configurable parked pattern matching', () => {
     ),
     false
   )
+})
+
+test('REQ-PROBE-018: default parked patterns stay available and clone safely', () => {
+  assert.deepEqual(DEFAULT_PARKED_PATTERNS, [
+    { nsSld: 'udag', responseRegex: 'Diese neue Domain wurde im Kundenauftrag registriert.' },
+    { nsSld: 'nic', responseRegex: String.raw`\.tel` },
+  ])
+
+  const clonedDefaults = getDefaultParkedPatterns()
+  assert.deepEqual(clonedDefaults, DEFAULT_PARKED_PATTERNS)
+  assert.notEqual(clonedDefaults, DEFAULT_PARKED_PATTERNS)
+
+  clonedDefaults[0].responseRegex = 'changed'
+  assert.equal(DEFAULT_PARKED_PATTERNS[0].responseRegex, 'Diese neue Domain wurde im Kundenauftrag registriert.')
+})
+
+test('REQ-PROBE-019: default probe settings restore concurrency attempts and parked patterns', () => {
+  const defaults = createDefaultProbeSettings()
+
+  assert.equal(defaults.batchConcurrency, PROBE_BATCH_CONCURRENCY_DEFAULT)
+  assert.equal(defaults.maxAttempts, PROBE_MAX_ATTEMPTS_DEFAULT)
+  assert.deepEqual(defaults.parkedPatterns, DEFAULT_PARKED_PATTERNS)
+
+  defaults.parkedPatterns[0].responseRegex = 'changed'
+  assert.equal(DEFAULT_PARKED_PATTERNS[0].responseRegex, 'Diese neue Domain wurde im Kundenauftrag registriert.')
 })

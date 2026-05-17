@@ -71,3 +71,12 @@ This document is the formal behavior contract for probe logic.
 ## REQ-PROBE-017 .info WHOIS Parity Stability
 - Node and Rust runtimes must produce parity-compatible WHOIS outcomes for `.info` domains in parity regression tests.
 - Rust WHOIS/RDAP fallback behavior must not fail solely because an RDAP endpoint responds with HTTP redirects that Node follows successfully.
+
+## REQ-PROBE-018 Default Parked Patterns
+- Default parked patterns must include an `udag` rule for `Diese neue Domain wurde im Kundenauftrag registriert.` and a `nic` rule for `\\.tel`.
+- New settings objects and legacy saved settings that do not yet contain a parked-patterns field must start with those defaults.
+- Explicitly saved parked patterns, including an empty list, must be preserved as-is.
+
+## REQ-PROBE-019 Restore Default Settings
+- Restoring default settings in the settings dialog must reset probe batch concurrency, probe max attempts, and parked patterns to the shared application defaults.
+- The restore operation must repopulate the default parked patterns even if the draft settings were previously cleared or edited.

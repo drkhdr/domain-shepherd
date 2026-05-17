@@ -48,6 +48,11 @@ export interface ParkedPattern {
   responseRegex: string
 }
 
+export const DEFAULT_PARKED_PATTERNS: ReadonlyArray<ParkedPattern> = [
+  { nsSld: 'udag', responseRegex: 'Diese neue Domain wurde im Kundenauftrag registriert.' },
+  { nsSld: 'nic', responseRegex: '\\.tel' },
+]
+
 export const ICANN_EPP_STATUS_DEFINITIONS: Record<string, string> = {
   ok: 'Standard active EPP status with no pending operations or restrictions.',
   inactive: 'Domain exists but has no working delegation (typically no nameservers).',
@@ -142,8 +147,22 @@ export const WHOIS_SERVER_OVERRIDES: Record<string, string> = {
   fr: 'whois.afnic.fr',
 }
 
+export interface DefaultProbeSettings {
+  batchConcurrency: number
+  maxAttempts: number
+  parkedPatterns: ParkedPattern[]
+}
+
 export function dedupeStrings(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b))
+}
+
+export function createDefaultProbeSettings(): DefaultProbeSettings {
+  return {
+    batchConcurrency: PROBE_BATCH_CONCURRENCY_DEFAULT,
+    maxAttempts: PROBE_MAX_ATTEMPTS_DEFAULT,
+    parkedPatterns: getDefaultParkedPatterns(),
+  }
 }
 
 export function normalizeDomain(domain: string): string {
@@ -292,6 +311,10 @@ export function normalizeParkedPatterns(value: unknown): ParkedPattern[] {
   }
 
   return patterns
+}
+
+export function getDefaultParkedPatterns(): ParkedPattern[] {
+  return DEFAULT_PARKED_PATTERNS.map((pattern) => ({ ...pattern }))
 }
 
 export function matchesConfiguredParkedPatterns(

@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
+  createDefaultProbeSettings,
   createProbeFailureResult,
   formatProbeProgress,
   getPrimaryWhoisStatus,
@@ -144,11 +145,7 @@ function createEmptyList(): DomainListResponse {
 }
 
 function createDefaultSettings(): ProbeSettings {
-  return {
-    batchConcurrency: PROBE_BATCH_CONCURRENCY_DEFAULT,
-    maxAttempts: PROBE_MAX_ATTEMPTS_DEFAULT,
-    parkedPatterns: [],
-  }
+  return createDefaultProbeSettings()
 }
 
 function loadLocalList(): DomainListResponse {
@@ -185,7 +182,9 @@ function loadLocalSettings(): ProbeSettings {
     return {
       batchConcurrency: normalizeProbeBatchConcurrency(parsed?.batchConcurrency),
       maxAttempts: normalizeProbeMaxAttempts(parsed?.maxAttempts),
-      parkedPatterns: normalizeParkedPatterns(parsed?.parkedPatterns),
+      parkedPatterns: Object.prototype.hasOwnProperty.call(parsed, 'parkedPatterns')
+        ? normalizeParkedPatterns(parsed?.parkedPatterns)
+        : createDefaultProbeSettings().parkedPatterns,
     }
   } catch {
     return createDefaultSettings()
@@ -1133,6 +1132,10 @@ export function ListPage() {
     showTransientFeedback('Settings saved.')
   }
 
+  function restoreDefaultSettings() {
+    setSettingsDraft(createDefaultSettings())
+  }
+
   function addParkedPatternRow() {
     setSettingsDraft((prev) => ({
       ...prev,
@@ -1513,10 +1516,10 @@ export function ListPage() {
                 <h2 className="text-lg font-semibold text-slate-900">Settings</h2>
                 <button
                   type="button"
-                  onClick={() => setSettingsOpen(false)}
+                  onClick={restoreDefaultSettings}
                   className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
                 >
-                  Close
+                  Restore defaults
                 </button>
               </div>
 
