@@ -14,6 +14,7 @@ const PARITY_DOMAINS: ProbeDomainInput[] = [
   { id: 'd2', domain: 'meineschufa.de' },
   { id: 'd3', domain: 'google.com' },
   { id: 'd4', domain: 'example.com' },
+  { id: 'd5', domain: 'xn--alleswassieschonimmerberscoringwissenwollten-bue.de' },
 ]
 
 function normalizeUrl(url?: string): string {

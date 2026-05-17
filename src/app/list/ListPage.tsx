@@ -34,7 +34,13 @@ type WhoisStatusFamily = 'ICANN EPP' | 'DENIC' | 'Unknown'
 interface DomainItem {
   id: string
   domain: string
+  displayDomain?: string
   addedAt: string
+}
+
+interface ParsedDomainEntry {
+  canonicalDomain: string
+  displayDomain: string
 }
 
 interface DomainListResponse {
@@ -52,6 +58,7 @@ interface ProbeSettings {
 interface TableRow {
   id: string
   domain: string
+  probeDomain: string
   probe?: ProbeResult
   target: string
   framesetUrl: string
@@ -78,8 +85,8 @@ const STATUS_CONFIG: Record<ProbeStatus, { label: string; badge: string; dot: st
   },
   parked: {
     label: 'Parked',
-    badge: 'bg-amber-100 text-amber-800 ring-amber-200 hover:bg-amber-200',
-    dot: 'bg-amber-500',
+    badge: 'bg-orange-100 text-orange-800 ring-orange-200 hover:bg-orange-200',
+    dot: 'bg-orange-500',
   },
   frameset: {
     label: 'Frameset',
@@ -103,11 +110,28 @@ const STATUS_CONFIG: Record<ProbeStatus, { label: string; badge: string; dot: st
   },
 }
 
-function splitDomainInput(input: string): string[] {
+function normalizeDisplayDomain(domain: string): string {
+  const trimmed = domain.trim().toLowerCase()
+  if (!trimmed) return ''
+
+  const base = trimmed
+    .replace(/^[^@]*@/, '')
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+    .split(/[/?#]/, 1)[0]
+    .replace(/:\d+$/, '')
+
+  return base.replace(/\.+$/, '')
+}
+
+function splitDomainInput(input: string): ParsedDomainEntry[] {
   return input
     .split(/[\s,;]+/)
-    .map((value) => normalizeDomain(value))
-    .filter(Boolean)
+    .map((value) => {
+      const displayDomain = normalizeDisplayDomain(value)
+      const canonicalDomain = normalizeDomain(displayDomain)
+      return { displayDomain, canonicalDomain }
+    })
+    .filter((entry) => Boolean(entry.displayDomain) && Boolean(entry.canonicalDomain))
 }
 
 function createEmptyList(): DomainListResponse {
@@ -775,13 +799,14 @@ export function ListPage() {
 
       const nextDomains = [...currentList.domains]
       for (const domain of domains) {
-        if (existing.has(domain)) continue
+        if (existing.has(domain.canonicalDomain)) continue
         nextDomains.push({
           id: crypto.randomUUID(),
-          domain,
+          domain: domain.canonicalDomain,
+          displayDomain: domain.displayDomain,
           addedAt: now,
         })
-        existing.add(domain)
+        existing.add(domain.canonicalDomain)
       }
 
       const nextList: DomainListResponse = {
@@ -797,12 +822,15 @@ export function ListPage() {
     }
   }
 
-  async function updateDomain(domainId: string, newDomain: string) {
+  async function updateDomain(domainId: string, newDisplayDomain: string) {
+    const nextDomain = normalizeDomain(newDisplayDomain)
+    if (!nextDomain) return
+
     try {
       const currentList = loadLocalList()
       const now = new Date().toISOString()
       const nextDomains = currentList.domains.map((domain) =>
-        domain.id === domainId ? { ...domain, domain: newDomain } : domain
+        domain.id === domainId ? { ...domain, domain: nextDomain, displayDomain: newDisplayDomain } : domain
       )
       const nextList: DomainListResponse = {
         ...currentList,
@@ -837,10 +865,10 @@ export function ListPage() {
     const next = prompt('Edit domain', currentDomain)
     if (!next) return
 
-    const normalized = next.trim().toLowerCase()
-    if (!normalized || normalized === currentDomain) return
+    const normalizedDisplayDomain = normalizeDisplayDomain(next)
+    if (!normalizedDisplayDomain || normalizedDisplayDomain === currentDomain) return
 
-    await updateDomain(domainId, normalized)
+    await updateDomain(domainId, normalizedDisplayDomain)
     setProbeResults((prev) => {
       if (!(domainId in prev)) return prev
       const nextResults = { ...prev }
@@ -1151,7 +1179,8 @@ export function ListPage() {
 
       return {
         id: domain.id,
-        domain: domain.domain,
+        domain: domain.displayDomain ?? domain.domain,
+        probeDomain: domain.domain,
         probe,
         target,
         framesetUrl,
@@ -1375,7 +1404,7 @@ export function ListPage() {
                             ) : (
                               <button
                                 type="button"
-                                onClick={() => probeSingleDomain({ id: row.id, domain: row.domain })}
+                                onClick={() => probeSingleDomain({ id: row.id, domain: row.probeDomain })}
                                 disabled={probing || Boolean(singleProbeIds[row.id])}
                                 className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-sm font-semibold text-slate-500 ring-1 ring-slate-200 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
                                 title="Probe this domain"
@@ -1454,7 +1483,7 @@ export function ListPage() {
                             <td colSpan={8} className="px-0 py-0">
                               <ProbeDetails
                                 result={row.probe}
-                                onReprobe={() => probeSingleDomain({ id: row.id, domain: row.domain })}
+                                onReprobe={() => probeSingleDomain({ id: row.id, domain: row.probeDomain })}
                                 reprobing={Boolean(singleProbeIds[row.id]) || probing}
                               />
                             </td>

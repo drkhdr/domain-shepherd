@@ -39,37 +39,24 @@ pub(crate) fn extract_frameset_url(final_url: Option<&str>, body_text: &str) -> 
         return None;
     }
 
-    let frame_tag = body_text.match_indices("<frame").find_map(|(start, _)| {
-        let after = body_text.get(start + 6..start + 7).unwrap_or("");
-        if !after.is_empty() {
-            let ch = after.chars().next().unwrap_or(' ');
-            if ch.is_ascii_alphanumeric() || ch == '_' {
-                return None;
-            }
-        }
+    let frame_tag_regex = RegexBuilder::new(r"<frame\b[^>]*>")
+        .case_insensitive(true)
+        .build()
+        .ok()?;
+    let frame_tag = frame_tag_regex.find(body_text).map(|m| m.as_str())?;
 
-        body_text[start..]
-            .find('>')
-            .map(|end_rel| &body_text[start..start + end_rel + 1])
-    })?;
-
-    let lower_tag = frame_tag.to_lowercase();
-    let src_index = lower_tag.find("src")?;
-    let after_src = &frame_tag[src_index + 3..];
-    let equal_index = after_src.find('=')?;
-    let value_part = after_src[equal_index + 1..].trim_start();
-
-    let src = if let Some(rest) = value_part.strip_prefix('"') {
-        rest.split('"').next().unwrap_or("")
-    } else if let Some(rest) = value_part.strip_prefix('\'') {
-        rest.split('\'').next().unwrap_or("")
-    } else {
-        value_part
-            .split(|ch: char| ch.is_whitespace() || ch == '>')
-            .next()
-            .unwrap_or("")
-    }
-    .trim();
+    let src_regex = RegexBuilder::new(r#"\bsrc\s*=\s*(?:\"([^\"]+)\"|'([^']+)'|([^\s>]+))"#)
+        .case_insensitive(true)
+        .build()
+        .ok()?;
+    let captures = src_regex.captures(frame_tag)?;
+    let src = captures
+        .get(1)
+        .or_else(|| captures.get(2))
+        .or_else(|| captures.get(3))
+        .map(|m| m.as_str())
+        .unwrap_or("")
+        .trim();
 
     if src.is_empty() {
         return None;
@@ -361,5 +348,12 @@ mod tests {
         let html = r#"<html><frameset cols=\"100%\"><frame src=\"https://target.example/\"></frameset></html>"#;
         let result = extract_frameset_url(Some("https://origin.example/"), html);
         assert_eq!(result.as_deref(), Some("https://target.example/"));
+    }
+
+    #[test]
+    fn extracts_uppercase_frame_src_case_insensitive() {
+        let html = r#"<HTML><FRAMESET ROWS="100%"><FRAME SRC="/upper"></FRAMESET></HTML>"#;
+        let result = extract_frameset_url(Some("https://example.org/base"), html);
+        assert_eq!(result.as_deref(), Some("https://example.org/upper"));
     }
 }
