@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ExternalLink } from '@/components/ExternalLink'
+import { APP_GIT_SHA, APP_VERSION } from '@/lib/app-config'
 
 export function AboutOverlay({ className = '' }: { className?: string }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -109,6 +110,9 @@ export function AboutOverlay({ className = '' }: { className?: string }) {
                       LinkedIn
                     </ExternalLink>
                     )
+                  </p>
+                  <p className="text-xs mt-3 text-slate-500 font-mono">
+                    Version {APP_VERSION} ({APP_GIT_SHA !== 'unknown' ? `git ${APP_GIT_SHA}` : 'git unknown'})
                   </p>
                 </div>
               </div>

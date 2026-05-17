@@ -220,17 +220,7 @@ fn build_rdap_client() -> Result<Client, String> {
         .map_err(|e| format!("HTTP client build failed: {e}"))
 }
 
-async fn fetch_rdap(domain: &str) -> WhoisResult {
-    let client = match build_rdap_client() {
-        Ok(client) => client,
-        Err(error) => {
-            return WhoisResult {
-                error: Some(error),
-                ..WhoisResult::default()
-            }
-        }
-    };
-
+fn rdap_endpoints_for_domain(domain: &str) -> Vec<String> {
     let mut endpoints = vec![
         format!("https://rdap.org/domain/{domain}"),
         format!("https://www.rdap.net/domain/{domain}"),
@@ -242,6 +232,20 @@ async fn fetch_rdap(domain: &str) -> WhoisResult {
         Some(tld) if tld == "fr" => endpoints.push(format!("https://rdap.afnic.fr/domain/{domain}")),
         _ => {}
     }
+
+    endpoints
+}
+
+async fn fetch_rdap_from_endpoints(endpoints: Vec<String>) -> WhoisResult {
+    let client = match build_rdap_client() {
+        Ok(client) => client,
+        Err(error) => {
+            return WhoisResult {
+                error: Some(error),
+                ..WhoisResult::default()
+            }
+        }
+    };
 
     let mut payload: Option<Value> = None;
     let mut errors: Vec<String> = Vec::new();
@@ -328,6 +332,10 @@ async fn fetch_rdap(domain: &str) -> WhoisResult {
     }
 }
 
+async fn fetch_rdap(domain: &str) -> WhoisResult {
+    fetch_rdap_from_endpoints(rdap_endpoints_for_domain(domain)).await
+}
+
 fn has_role(entity: &Value, role: &str) -> bool {
     entity
         .get("roles")
@@ -377,4 +385,89 @@ fn extract_vcard_text(entity: Option<&Value>, field_name: &str) -> Option<String
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpListener};
+    use std::thread;
+
+    use super::fetch_rdap_from_endpoints;
+
+    fn spawn_rdap_redirect_mock() -> SocketAddr {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock RDAP server");
+        let addr = listener.local_addr().expect("read mock server addr");
+
+        thread::spawn(move || {
+            // Serve two requests: first 302 redirect, then 200 JSON payload.
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().expect("accept mock connection");
+                let mut buffer = [0_u8; 4096];
+                let read = stream.read(&mut buffer).expect("read mock request");
+                let request = String::from_utf8_lossy(&buffer[..read]);
+
+                if request.starts_with("GET /domain/example.info ") {
+                    let response = concat!(
+                        "HTTP/1.1 302 Found\r\n",
+                        "Location: /rdap/domain/example.info\r\n",
+                        "Content-Length: 0\r\n",
+                        "Connection: close\r\n",
+                        "\r\n"
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write redirect response");
+                } else if request.starts_with("GET /rdap/domain/example.info ") {
+                    let body = r#"{
+  "registrarName": "Redirect Registrar",
+  "port43": "whois.example.info",
+  "status": ["active"],
+  "nameservers": [{"ldhName": "ns1.example.net"}],
+  "events": [{"eventAction": "registration", "eventDate": "2020-01-01T00:00:00Z"}]
+}"#;
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/rdap+json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write rdap payload response");
+                } else {
+                    let response = concat!(
+                        "HTTP/1.1 404 Not Found\r\n",
+                        "Content-Length: 0\r\n",
+                        "Connection: close\r\n",
+                        "\r\n"
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write not-found response");
+                }
+            }
+        });
+
+        addr
+    }
+
+    #[test]
+    fn rdap_follows_http_redirect_and_parses_payload() {
+        let addr = spawn_rdap_redirect_mock();
+        let endpoint = format!("http://{addr}/domain/example.info");
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("create tokio runtime");
+
+        let result = runtime.block_on(fetch_rdap_from_endpoints(vec![endpoint]));
+
+        assert_eq!(result.error, None, "RDAP should succeed after redirect");
+        assert_eq!(result.registrar.as_deref(), Some("Redirect Registrar"));
+        assert_eq!(result.server.as_deref(), Some("whois.example.info"));
+        assert_eq!(result.created_at.as_deref(), Some("2020-01-01T00:00:00Z"));
+        assert_eq!(result.statuses, Some(vec!["active".to_string()]));
+        assert_eq!(result.name_servers, Some(vec!["ns1.example.net".to_string()]));
+    }
 }
