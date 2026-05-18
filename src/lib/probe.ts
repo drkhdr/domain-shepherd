@@ -40,6 +40,9 @@ export interface ProbeResult {
   dnsError?: string
   error?: string
   errorKind?: ProbeErrorKind
+  dnsMs: number
+  httpMs: number
+  whoisMs: number
   probeMs: number
 }
 
@@ -426,8 +429,22 @@ export function createProbeFailureResult(input: ProbeDomainInput, error: string)
     dnsNameServers: [],
     error,
     errorKind: 'probe-failed',
+    dnsMs: 0,
+    httpMs: 0,
+    whoisMs: 0,
     probeMs: 0,
   }
+}
+
+export function calculateWhoisSharePercent(probeMs: number, whoisMs: number): number {
+  const total = Math.max(0, Math.trunc(probeMs))
+  const whois = Math.max(0, Math.trunc(whoisMs))
+  if (total === 0) {
+    return 0
+  }
+
+  const ratio = Math.min(1, whois / total)
+  return Math.round(ratio * 100)
 }
 
 export function isExplicitRequestTimeoutError(error: unknown): boolean {

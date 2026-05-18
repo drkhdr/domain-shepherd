@@ -678,7 +678,10 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
 export async function probeDomain(domainInput: ProbeDomainInput, options?: ProbeRuntimeOptions): Promise<ProbeResult> {
   const startedAt = Date.now()
   const domain = normalizeDomain(domainInput.domain)
+  const whoisStartedAt = Date.now()
   const whoisPromise = fetchWhois(domain)
+    .then((whois) => ({ whois, whoisMs: Date.now() - whoisStartedAt }))
+    .catch(() => ({ whois: { error: 'WHOIS lookup failed' } as WhoisResult, whoisMs: Date.now() - whoisStartedAt }))
 
   const result: ProbeResult = {
     domainId: domainInput.id,
@@ -687,11 +690,16 @@ export async function probeDomain(domainInput: ProbeDomainInput, options?: Probe
     redirectChain: [],
     ipAddresses: [],
     dnsNameServers: [],
+    dnsMs: 0,
+    httpMs: 0,
+    whoisMs: 0,
     probeMs: 0,
   }
 
   try {
+    const dnsStartedAt = Date.now()
     const dns = await resolveDns(domain)
+    result.dnsMs = Date.now() - dnsStartedAt
     result.ipAddresses = dns.addresses
     result.cname = dns.cname
     result.dnsNameServers = dns.nameServers
@@ -699,12 +707,16 @@ export async function probeDomain(domainInput: ProbeDomainInput, options?: Probe
     if (result.ipAddresses.length === 0 && !result.cname) {
       result.status = 'no-dns'
       result.dnsError = dns.dnsError || 'No DNS records found'
-      result.whois = await whoisPromise
+      const whoisResult = await whoisPromise
+      result.whois = whoisResult.whois
+      result.whoisMs = whoisResult.whoisMs
       result.probeMs = Date.now() - startedAt
       return result
     }
 
+    const httpStartedAt = Date.now()
     const httpProbe = await followHttp(domain, dns.nameServers, options)
+    result.httpMs = Date.now() - httpStartedAt
     result.status = httpProbe.status
     result.httpStatus = httpProbe.httpStatus
     result.redirectChain = httpProbe.redirectChain
@@ -715,12 +727,16 @@ export async function probeDomain(domainInput: ProbeDomainInput, options?: Probe
     result.contentType = httpProbe.contentType
     result.error = httpProbe.error
     result.errorKind = httpProbe.errorKind
-    result.whois = await whoisPromise
+    const whoisResult = await whoisPromise
+    result.whois = whoisResult.whois
+    result.whoisMs = whoisResult.whoisMs
   } catch (error) {
     result.status = 'unreachable'
     result.error = error instanceof Error ? error.message : 'Probe failed'
     result.errorKind = 'probe-failed'
-    result.whois = await whoisPromise.catch(() => ({ error: 'WHOIS lookup failed' }))
+    const whoisResult = await whoisPromise
+    result.whois = whoisResult.whois
+    result.whoisMs = whoisResult.whoisMs
   }
 
   result.probeMs = Date.now() - startedAt

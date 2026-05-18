@@ -84,3 +84,7 @@ This document is the formal behavior contract for probe logic.
 ## REQ-PROBE-020 Table Filter Scope and Target Status Filter
 - The free-text table search filter must match only against table Domain and Target values.
 - Additional table filters must support filtering by Target status class (`none`, `2xx`, `3xx`, `4xx`, `5xx`) and NS SLD.
+
+## REQ-PROBE-021 Probe Timing Breakdown
+- Probe results must expose `dnsMs`, `httpMs`, and `whoisMs` timing fields in addition to `probeMs`.
+- UI probe details must show WHOIS timing percentage computed from `whoisMs / probeMs`, rounded to whole percent and clamped to a maximum of `100%`.

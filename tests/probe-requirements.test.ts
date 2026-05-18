@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  calculateWhoisSharePercent,
   classifyProbeStatus,
   createDefaultProbeSettings,
   createProbeFailureResult,
@@ -101,6 +102,9 @@ test('REQ-PROBE-013: probe fallback result shape', () => {
   assert.equal(fallback.error, 'timeout')
   assert.deepEqual(fallback.redirectChain, [])
   assert.deepEqual(fallback.ipAddresses, [])
+  assert.equal(fallback.dnsMs, 0)
+  assert.equal(fallback.httpMs, 0)
+  assert.equal(fallback.whoisMs, 0)
 })
 
 test('REQ-PROBE-014: probe max attempts normalization', () => {
@@ -200,4 +204,12 @@ test('REQ-PROBE-020: target status class filter behavior', () => {
   assert.equal(matchesTargetStatusFilter(404, '4xx'), true)
   assert.equal(matchesTargetStatusFilter(503, '5xx'), true)
   assert.equal(matchesTargetStatusFilter(404, '2xx'), false)
+})
+
+test('REQ-PROBE-021: whois timing share percent helper', () => {
+  assert.equal(calculateWhoisSharePercent(0, 100), 0)
+  assert.equal(calculateWhoisSharePercent(1000, 0), 0)
+  assert.equal(calculateWhoisSharePercent(1000, 250), 25)
+  assert.equal(calculateWhoisSharePercent(999, 333), 33)
+  assert.equal(calculateWhoisSharePercent(1000, 1200), 100)
 })

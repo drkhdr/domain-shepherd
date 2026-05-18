@@ -86,6 +86,9 @@ pub struct ProbeResult {
     pub(crate) error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) error_kind: Option<String>,
+    pub(crate) dns_ms: u64,
+    pub(crate) http_ms: u64,
+    pub(crate) whois_ms: u64,
     pub(crate) probe_ms: u64,
 }
 

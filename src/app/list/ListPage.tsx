@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
+  calculateWhoisSharePercent,
   createDefaultProbeSettings,
   createProbeFailureResult,
   formatProbeProgress,
@@ -436,6 +437,7 @@ function ProbeDetails({
   onReprobe: () => void
   reprobing: boolean
 }) {
+  const whoisSharePercent = calculateWhoisSharePercent(result.probeMs, result.whoisMs)
   const redirectFull = [...(result.redirectChain ?? []), result.finalUrl ?? ''].filter(Boolean)
   const hasWhois = Boolean(
     result.whois?.registrar ||
@@ -473,6 +475,18 @@ function ProbeDetails({
         <span>
           <span className="text-slate-400">Time </span>
           {result.probeMs} ms
+        </span>
+        <span>
+          <span className="text-slate-400">DNS </span>
+          {result.dnsMs} ms
+        </span>
+        <span>
+          <span className="text-slate-400">HTTP </span>
+          {result.httpMs} ms
+        </span>
+        <span>
+          <span className="text-slate-400">WHOIS </span>
+          {result.whoisMs} ms ({whoisSharePercent}%)
         </span>
         {result.serverHeader && (
           <span>
