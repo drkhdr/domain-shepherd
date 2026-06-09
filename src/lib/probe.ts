@@ -283,18 +283,6 @@ export function isImplicitlyRedirectedResponse(requestUrl: string, responseUrl?:
   return request !== effective
 }
 
-export function shouldProbeHttpsVariant(currentUrl: string, redirectChain: RedirectChainItem[] | undefined, responseStatus?: number): boolean {
-  if (!currentUrl.toLowerCase().startsWith('http://')) {
-    return false
-  }
-
-  if ((redirectChain?.length ?? 0) === 0) {
-    return false
-  }
-
-  return typeof responseStatus === 'number' && responseStatus >= 200 && responseStatus < 300
-}
-
 export function classifyProbeStatus(
   domain: string,
   finalUrl?: string,

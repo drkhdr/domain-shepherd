@@ -100,7 +100,3 @@ This document is the formal behavior contract for probe logic.
 ## REQ-PROBE-024 Implicit Redirect Preservation
 - If HTTP client/runtime behavior returns a response whose effective URL differs from the requested URL, probing must treat that as an implicit redirect hop.
 - The original requested URL must be appended to the redirect chain even when no `Location` header is observable by application code.
-
-## REQ-PROBE-025 Redirected HTTP Success Recheck
-- If a redirected chain lands on an HTTP URL that returns a 200 response, probing must recheck the HTTPS variant before finalizing the chain.
-- This preserves terminal HTTPS redirects that may be hidden by environment-specific HTTP responses.
