@@ -21,12 +21,6 @@ async fn follow_url_redirects(client: &Client, initial_url: &str) -> (String, Op
         };
 
         let status = response.status();
-        let effective_url = response.url().to_string();
-
-        if !effective_url.is_empty() && effective_url != current_url {
-            current_url = effective_url;
-            continue;
-        }
 
         let location = response
             .headers()
@@ -134,17 +128,6 @@ pub(crate) async fn follow_http(
         };
 
         let status = response.status();
-        let effective_url = response.url().to_string();
-
-        if !effective_url.is_empty() && effective_url != current_url {
-            redirect_chain.push(RedirectChainEntry {
-                url: current_url.clone(),
-                response_status: None,
-            });
-            current_url = effective_url;
-            allow_http_fallback = false;
-            continue;
-        }
 
         let location = response
             .headers()

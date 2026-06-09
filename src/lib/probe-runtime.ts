@@ -3,7 +3,6 @@ import {
   classifyProbeStatus,
   dedupeStrings,
   extractFramesetUrl,
-  isImplicitlyRedirectedResponse,
   isProbeDomainInput,
   isExplicitRequestTimeoutError,
   MAX_REDIRECTS,
@@ -63,6 +62,73 @@ const DNS_TYPES = {
   NS: 2,
   CNAME: 5,
   AAAA: 28,
+}
+
+interface HttpRequestResult {
+  status: number
+  headers: Record<string, string>
+  bodyText: string
+}
+
+function normalizeHeaderValue(value: string | string[] | undefined): string | undefined {
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value.join(', ')
+  }
+
+  return undefined
+}
+
+async function requestHttpUrl(url: string): Promise<HttpRequestResult> {
+  const target = new URL(url)
+  const transport = target.protocol === 'https:' ? await import('node:https') : await import('node:http')
+
+  return await new Promise<HttpRequestResult>((resolve, reject) => {
+    const request = transport.request(
+      target,
+      {
+        method: 'GET',
+        headers: {
+          'user-agent': APP_USER_AGENT,
+          accept: 'text/html,*/*',
+        },
+      },
+      (response) => {
+        const status = response.statusCode ?? 0
+        const headers: Record<string, string> = {}
+        for (const [key, rawValue] of Object.entries(response.headers)) {
+          const value = normalizeHeaderValue(rawValue)
+          if (value) {
+            headers[key.toLowerCase()] = value
+          }
+        }
+
+        const chunks: Buffer[] = []
+        response.on('data', (chunk: Buffer | string) => {
+          chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+        })
+        response.on('error', (error) => reject(error))
+        response.on('end', () => {
+          resolve({
+            status,
+            headers,
+            bodyText: Buffer.concat(chunks).toString('utf8'),
+          })
+        })
+      }
+    )
+
+    request.setTimeout(REQUEST_TIMEOUT_MS, () => {
+      const timeoutError = new Error('Request timeout')
+      timeoutError.name = 'TimeoutError'
+      request.destroy(timeoutError)
+    })
+    request.on('error', (error) => reject(error))
+    request.end()
+  })
 }
 
 function getEventDate(events: unknown, ...actions: string[]): string | undefined {
@@ -559,28 +625,16 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
     let currentUrl = initialUrl
 
     for (let attempt = 0; attempt <= MAX_REDIRECTS; attempt += 1) {
-      let response: Response
+      let response: HttpRequestResult
       try {
-        response = await fetch(currentUrl, {
-          redirect: 'manual',
-          cache: 'no-store',
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-          headers: {
-            'user-agent': APP_USER_AGENT,
-          },
-        })
+        response = await requestHttpUrl(currentUrl)
       } catch {
         return {
           finalUrl: currentUrl,
         }
       }
 
-      if (isImplicitlyRedirectedResponse(currentUrl, response.url)) {
-        currentUrl = response.url
-        continue
-      }
-
-      const location = response.headers.get('location')
+      const location = response.headers.location
       if (location && response.status >= 300 && response.status < 400) {
         currentUrl = new URL(location, currentUrl).toString()
         continue
@@ -602,16 +656,9 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
   let allowHttpFallback = true
 
   for (let attempt = 0; attempt <= MAX_REDIRECTS; attempt += 1) {
-    let response: Response
+    let response: HttpRequestResult
     try {
-      response = await fetch(currentUrl, {
-        redirect: 'manual',
-        cache: 'no-store',
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        headers: {
-          'user-agent': APP_USER_AGENT,
-        },
-      })
+      response = await requestHttpUrl(currentUrl)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Request failed'
       if (allowHttpFallback && currentUrl.startsWith('https://')) {
@@ -631,16 +678,7 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
       }
     }
 
-    if (isImplicitlyRedirectedResponse(currentUrl, response.url)) {
-      redirectChain.push({
-        url: currentUrl,
-      })
-      currentUrl = response.url
-      allowHttpFallback = false
-      continue
-    }
-
-    const location = response.headers.get('location')
+    const location = response.headers.location
     if (location && response.status >= 300 && response.status < 400) {
       const nextUrl = new URL(location, currentUrl).toString()
       redirectChain.push({
@@ -653,9 +691,9 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
     }
 
     const finalUrl = currentUrl
-    const serverHeader = response.headers.get('server') ?? undefined
-    const contentType = response.headers.get('content-type') ?? undefined
-    const bodyText = await response.text().catch(() => '')
+  const serverHeader = response.headers.server
+  const contentType = response.headers['content-type']
+  const bodyText = response.bodyText
 
     const framesetSourceUrl = extractFramesetUrl(finalUrl, contentType, bodyText)
     const configuredParked = matchesConfiguredParkedPatterns(options?.parkedPatterns, dnsNameServers, bodyText)
