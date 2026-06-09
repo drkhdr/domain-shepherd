@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  buildRedirectChainWithFinal,
   calculateWhoisSharePercent,
   classifyProbeStatus,
   createDefaultProbeSettings,
@@ -9,6 +10,7 @@ import {
   DEFAULT_PARKED_PATTERNS,
   extractFramesetUrl,
   formatProbeProgress,
+  getResponseBadgeHttpStatus,
   getDefaultParkedPatterns,
   getNameServerSld,
   matchesDomainTargetSearchFilter,
@@ -212,4 +214,30 @@ test('REQ-PROBE-021: whois timing share percent helper', () => {
   assert.equal(calculateWhoisSharePercent(1000, 250), 25)
   assert.equal(calculateWhoisSharePercent(999, 333), 33)
   assert.equal(calculateWhoisSharePercent(1000, 1200), 100)
+})
+
+test('REQ-PROBE-022: response badge hides volatile target code for redirected status', () => {
+  assert.equal(getResponseBadgeHttpStatus('redirected', 404), undefined)
+  assert.equal(getResponseBadgeHttpStatus('redirected', 200), undefined)
+  assert.equal(getResponseBadgeHttpStatus('ok', 200), 200)
+  assert.equal(getResponseBadgeHttpStatus('unreachable', 0), undefined)
+})
+
+test('REQ-PROBE-023: redirect chain exposes per-hop response status and appends final target status', () => {
+  const chain = buildRedirectChainWithFinal(
+    [
+      { url: 'http://example.com', responseStatus: 301 },
+      { url: 'https://www.example.com', responseStatus: 302 },
+      'https://legacy.example.com/path',
+    ],
+    'https://target.example.net/',
+    200
+  )
+
+  assert.deepEqual(chain, [
+    { url: 'http://example.com', responseStatus: 301 },
+    { url: 'https://www.example.com', responseStatus: 302 },
+    { url: 'https://legacy.example.com/path' },
+    { url: 'https://target.example.net/', responseStatus: 200 },
+  ])
 })

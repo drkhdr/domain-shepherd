@@ -22,12 +22,19 @@ export interface WhoisResult {
   error?: string
 }
 
+export interface RedirectChainEntry {
+  url: string
+  responseStatus?: number
+}
+
+export type RedirectChainItem = string | RedirectChainEntry
+
 export interface ProbeResult {
   domainId: string
   domain: string
   status: ProbeStatus
   httpStatus?: number
-  redirectChain?: string[]
+  redirectChain?: RedirectChainItem[]
   finalUrl?: string
   framesetUrl?: string
   framesetHttpStatus?: number
@@ -195,10 +202,62 @@ export function isProbeDomainInput(value: unknown): value is ProbeDomainInput {
   return typeof candidate.id === 'string' && typeof candidate.domain === 'string'
 }
 
+export function normalizeRedirectChainItem(item: RedirectChainItem): RedirectChainEntry | undefined {
+  if (typeof item === 'string') {
+    const url = item.trim()
+    return url ? { url } : undefined
+  }
+
+  if (!item || typeof item.url !== 'string') {
+    return undefined
+  }
+
+  const url = item.url.trim()
+  if (!url) {
+    return undefined
+  }
+
+  const responseStatus =
+    typeof item.responseStatus === 'number' && Number.isFinite(item.responseStatus) && item.responseStatus > 0
+      ? Math.trunc(item.responseStatus)
+      : undefined
+
+  return {
+    url,
+    responseStatus,
+  }
+}
+
+export function buildRedirectChainWithFinal(
+  redirectChain: RedirectChainItem[] | undefined,
+  finalUrl?: string,
+  finalStatus?: number
+): RedirectChainEntry[] {
+  const steps: RedirectChainEntry[] = []
+
+  for (const item of redirectChain ?? []) {
+    const normalized = normalizeRedirectChainItem(item)
+    if (normalized) {
+      steps.push(normalized)
+    }
+  }
+
+  if (finalUrl) {
+    const responseStatus =
+      typeof finalStatus === 'number' && Number.isFinite(finalStatus) && finalStatus > 0 ? Math.trunc(finalStatus) : undefined
+    steps.push({
+      url: finalUrl,
+      responseStatus,
+    })
+  }
+
+  return steps
+}
+
 export function classifyProbeStatus(
   domain: string,
   finalUrl?: string,
-  redirectChain?: string[],
+  redirectChain?: RedirectChainItem[],
   serverHeader?: string,
   contentType?: string
 ): ProbeStatus {
@@ -412,6 +471,19 @@ export function normalizeProbeMaxAttempts(value: unknown): number {
 }
 
 export const PROBE_MAX_ATTEMPTS_DEFAULT = normalizeProbeMaxAttempts(PROBE_MAX_ATTEMPTS_ENV_VALUE)
+
+export function getResponseBadgeHttpStatus(status: ProbeStatus, httpStatus?: number): number | undefined {
+  if (!httpStatus || httpStatus <= 0) {
+    return undefined
+  }
+
+  // Redirect targets can legitimately vary by probe vantage point; keep the badge stable.
+  if (status === 'redirected') {
+    return undefined
+  }
+
+  return httpStatus
+}
 
 export function formatProbeProgress(completed: number, total: number): string {
   const normalizedTotal = Math.max(0, Math.trunc(total))

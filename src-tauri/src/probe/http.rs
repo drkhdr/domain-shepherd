@@ -2,7 +2,7 @@ use reqwest::header::{ACCEPT, LOCATION, SERVER, USER_AGENT};
 use reqwest::Client;
 
 use super::constants::{APP_USER_AGENT, MAX_REDIRECTS, REQUEST_TIMEOUT_MS};
-use super::types::HttpProbeResult;
+use super::types::{HttpProbeResult, RedirectChainEntry};
 use super::util::{classify_probe_status, extract_frameset_url, matches_configured_parked_patterns};
 
 async fn follow_url_redirects(client: &Client, initial_url: &str) -> (String, Option<u16>) {
@@ -82,7 +82,7 @@ pub(crate) async fn follow_http(
         }
     };
 
-    let mut redirect_chain: Vec<String> = Vec::new();
+    let mut redirect_chain: Vec<RedirectChainEntry> = Vec::new();
     let mut current_url = format!("https://{domain}");
     let mut allow_http_fallback = true;
 
@@ -141,7 +141,10 @@ pub(crate) async fn follow_http(
                     .map(|url| url.to_string())
                     .unwrap_or(location);
 
-                redirect_chain.push(current_url.clone());
+                redirect_chain.push(RedirectChainEntry {
+                    url: current_url.clone(),
+                    response_status: Some(status.as_u16()),
+                });
                 current_url = next_url;
                 allow_http_fallback = false;
                 continue;

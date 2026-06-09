@@ -54,6 +54,14 @@ pub struct WhoisResult {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RedirectChainEntry {
+    pub(crate) url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) response_status: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProbeResult {
     pub(crate) domain_id: String,
     pub(crate) domain: String,
@@ -61,7 +69,7 @@ pub struct ProbeResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) http_status: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) redirect_chain: Option<Vec<String>>,
+    pub(crate) redirect_chain: Option<Vec<RedirectChainEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) final_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -104,7 +112,7 @@ pub(crate) struct DnsLookupResult {
 pub(crate) struct HttpProbeResult {
     pub(crate) status: ProbeStatus,
     pub(crate) http_status: Option<u16>,
-    pub(crate) redirect_chain: Vec<String>,
+    pub(crate) redirect_chain: Vec<RedirectChainEntry>,
     pub(crate) final_url: Option<String>,
     pub(crate) frameset_url: Option<String>,
     pub(crate) frameset_http_status: Option<u16>,

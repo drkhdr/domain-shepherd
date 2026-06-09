@@ -88,3 +88,11 @@ This document is the formal behavior contract for probe logic.
 ## REQ-PROBE-021 Probe Timing Breakdown
 - Probe results must expose `dnsMs`, `httpMs`, and `whoisMs` timing fields in addition to `probeMs`.
 - UI probe details must show WHOIS timing percentage computed from `whoisMs / probeMs`, rounded to whole percent and clamped to a maximum of `100%`.
+
+## REQ-PROBE-022 Stable Redirected Response Badge
+- The response badge label must not append target HTTP status when probe status is `redirected`.
+- This keeps the primary response badge stable across different probe vantage points while preserving target HTTP status in dedicated target-status UI.
+
+## REQ-PROBE-023 Redirect Chain Response Statuses
+- Redirect chain data must include per-hop response status for each redirect source URL.
+- Redirect chain UI must display each line item as `<url> (<response status>)`, including the final target URL with its final HTTP status.

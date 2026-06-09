@@ -1,4 +1,5 @@
 import {
+  type RedirectChainEntry,
   classifyProbeStatus,
   dedupeStrings,
   extractFramesetUrl,
@@ -17,7 +18,7 @@ import type { ParkedPattern, ProbeDomainInput, ProbeErrorKind, ProbeResult, Prob
 interface HttpProbeResult {
   status: ProbeStatus
   httpStatus?: number
-  redirectChain: string[]
+  redirectChain: RedirectChainEntry[]
   finalUrl?: string
   framesetUrl?: string
   framesetHttpStatus?: number
@@ -590,7 +591,7 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
     }
   }
 
-  const redirectChain: string[] = []
+  const redirectChain: RedirectChainEntry[] = []
   let currentUrl = `https://${domain}`
   let allowHttpFallback = true
 
@@ -627,7 +628,10 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
     const location = response.headers.get('location')
     if (location && response.status >= 300 && response.status < 400) {
       const nextUrl = new URL(location, currentUrl).toString()
-      redirectChain.push(currentUrl)
+      redirectChain.push({
+        url: currentUrl,
+        responseStatus: response.status,
+      })
       currentUrl = nextUrl
       allowHttpFallback = false
       continue

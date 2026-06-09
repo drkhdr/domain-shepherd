@@ -4,7 +4,7 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { runProbeBatch } from '../src/lib/probe-runtime'
-import type { ProbeDomainInput, ProbeResult } from '../src/lib/probe'
+import type { ProbeDomainInput, ProbeResult, RedirectChainItem } from '../src/lib/probe'
 
 const PARITY_DOMAINS: ProbeDomainInput[] = [
   { id: 'd1', domain: 'schufa.de' },
@@ -25,8 +25,12 @@ function normalizeUrl(url?: string): string {
   }
 }
 
-function normalizeChain(chain?: string[]): string[] {
-  return (chain ?? []).map((entry) => normalizeUrl(entry))
+function getRedirectChainUrl(entry: RedirectChainItem): string {
+  return typeof entry === 'string' ? entry : entry.url
+}
+
+function normalizeChain(chain?: RedirectChainItem[]): string[] {
+  return (chain ?? []).map((entry) => normalizeUrl(getRedirectChainUrl(entry)))
 }
 
 function normalizeSet(values?: string[]): string[] {

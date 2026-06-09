@@ -4,9 +4,11 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   calculateWhoisSharePercent,
+  buildRedirectChainWithFinal,
   createDefaultProbeSettings,
   createProbeFailureResult,
   formatProbeProgress,
+  getResponseBadgeHttpStatus,
   getPrimaryWhoisStatus,
   matchesDomainTargetSearchFilter,
   matchesTargetStatusFilter,
@@ -284,6 +286,7 @@ function ProbeBadge({
   onToggle: () => void
 }) {
   const cfg = STATUS_CONFIG[result.status]
+  const badgeHttpStatus = getResponseBadgeHttpStatus(result.status, result.httpStatus)
   return (
     <button
       type="button"
@@ -293,7 +296,7 @@ function ProbeBadge({
     >
       <span className={`inline-block h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
       {cfg.label}
-      {result.httpStatus ? <span className="opacity-60">- {result.httpStatus}</span> : null}
+      {badgeHttpStatus ? <span className="opacity-60">- {badgeHttpStatus}</span> : null}
       <span className="opacity-50">{expanded ? '▴' : '▾'}</span>
     </button>
   )
@@ -438,7 +441,7 @@ function ProbeDetails({
   reprobing: boolean
 }) {
   const whoisSharePercent = calculateWhoisSharePercent(result.probeMs, result.whoisMs)
-  const redirectFull = [...(result.redirectChain ?? []), result.finalUrl ?? ''].filter(Boolean)
+  const redirectFull = buildRedirectChainWithFinal(result.redirectChain, result.finalUrl, result.httpStatus)
   const hasWhois = Boolean(
     result.whois?.registrar ||
       result.whois?.createdAt ||
@@ -644,12 +647,15 @@ function ProbeDetails({
       {redirectFull.length > 1 && (
         <div>
           <p className="text-slate-400 mb-1">Redirect chain</p>
-          {redirectFull.map((url, i) => (
+          {redirectFull.map((step, i) => (
             <div key={i} className="flex items-start gap-1.5">
               <span className="text-slate-300 mt-px select-none">{i === redirectFull.length - 1 ? '└' : '├'}</span>
-              <ExternalLink href={url} className="break-all text-blue-600 hover:underline">
-                {truncate(url, 90)}
-              </ExternalLink>
+              <span className="inline-flex max-w-full items-center gap-1.5">
+                <ExternalLink href={step.url} className="break-all text-blue-600 hover:underline">
+                  {truncate(step.url, 90)}
+                </ExternalLink>
+                <span className="text-slate-500">({step.responseStatus ?? 'unknown'})</span>
+              </span>
             </div>
           ))}
         </div>

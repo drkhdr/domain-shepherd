@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use regex::RegexBuilder;
 
 use super::constants::PARKING_SIGNALS;
-use super::types::{ParkedPattern, ProbeStatus};
+use super::types::{ParkedPattern, ProbeStatus, RedirectChainEntry};
 use url::Url;
 
 pub(crate) fn normalize_domain(domain: &str) -> String {
@@ -71,7 +71,7 @@ pub(crate) fn extract_frameset_url(final_url: Option<&str>, body_text: &str) -> 
 pub(crate) fn classify_probe_status(
     domain: &str,
     final_url: Option<&str>,
-    redirect_chain: &[String],
+    redirect_chain: &[RedirectChainEntry],
     server_header: Option<&str>,
     content_type: Option<&str>,
 ) -> ProbeStatus {
