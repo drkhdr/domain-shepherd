@@ -21,6 +21,7 @@ import {
   PROBE_MAX_ATTEMPTS_DEFAULT,
   getWhoisStatusDefinition,
   getWhoisStatusFamily,
+  isImplicitlyRedirectedResponse,
   normalizeProbeBatchConcurrency,
   normalizeProbeMaxAttempts,
   normalizeDomain,
@@ -240,4 +241,16 @@ test('REQ-PROBE-023: redirect chain exposes per-hop response status and appends 
     { url: 'https://legacy.example.com/path' },
     { url: 'https://target.example.net/', responseStatus: 200 },
   ])
+})
+
+test('REQ-PROBE-024: implicit redirect detection compares effective response URL', () => {
+  assert.equal(
+    isImplicitlyRedirectedResponse('http://www.meineschufa.de/bonitaetsauskunft', 'https://www.meineschufa.de/bonitaetsauskunft'),
+    true
+  )
+  assert.equal(
+    isImplicitlyRedirectedResponse('https://www.example.com/path/', 'https://www.example.com/path'),
+    false
+  )
+  assert.equal(isImplicitlyRedirectedResponse('https://www.example.com/path', undefined), false)
 })

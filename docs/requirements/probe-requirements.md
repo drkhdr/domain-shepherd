@@ -96,3 +96,7 @@ This document is the formal behavior contract for probe logic.
 ## REQ-PROBE-023 Redirect Chain Response Statuses
 - Redirect chain data must include per-hop response status for each redirect source URL.
 - Redirect chain UI must display each line item as `<url> (<response status>)`, including the final target URL with its final HTTP status.
+
+## REQ-PROBE-024 Implicit Redirect Preservation
+- If HTTP client/runtime behavior returns a response whose effective URL differs from the requested URL, probing must treat that as an implicit redirect hop.
+- The original requested URL must be appended to the redirect chain even when no `Location` header is observable by application code.

@@ -3,6 +3,7 @@ import {
   classifyProbeStatus,
   dedupeStrings,
   extractFramesetUrl,
+  isImplicitlyRedirectedResponse,
   isProbeDomainInput,
   isExplicitRequestTimeoutError,
   MAX_REDIRECTS,
@@ -574,6 +575,11 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
         }
       }
 
+      if (isImplicitlyRedirectedResponse(currentUrl, response.url)) {
+        currentUrl = response.url
+        continue
+      }
+
       const location = response.headers.get('location')
       if (location && response.status >= 300 && response.status < 400) {
         currentUrl = new URL(location, currentUrl).toString()
@@ -623,6 +629,15 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
         error: message,
         errorKind: timedOut ? 'request-timeout' : 'network-error',
       }
+    }
+
+    if (isImplicitlyRedirectedResponse(currentUrl, response.url)) {
+      redirectChain.push({
+        url: currentUrl,
+      })
+      currentUrl = response.url
+      allowHttpFallback = false
+      continue
     }
 
     const location = response.headers.get('location')

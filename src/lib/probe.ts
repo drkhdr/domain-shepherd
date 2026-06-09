@@ -254,6 +254,35 @@ export function buildRedirectChainWithFinal(
   return steps
 }
 
+function normalizeComparableUrl(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  try {
+    const parsed = new URL(trimmed)
+    const pathname = parsed.pathname.replace(/\/$/, '') || '/'
+    return `${parsed.protocol}//${parsed.host}${pathname}${parsed.search}`.toLowerCase()
+  } catch {
+    return trimmed.replace(/\/$/, '').toLowerCase()
+  }
+}
+
+export function isImplicitlyRedirectedResponse(requestUrl: string, responseUrl?: string): boolean {
+  if (!responseUrl) {
+    return false
+  }
+
+  const request = normalizeComparableUrl(requestUrl)
+  const effective = normalizeComparableUrl(responseUrl)
+  if (!request || !effective) {
+    return false
+  }
+
+  return request !== effective
+}
+
 export function classifyProbeStatus(
   domain: string,
   finalUrl?: string,
