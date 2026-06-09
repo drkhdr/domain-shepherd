@@ -706,6 +706,8 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
       framesetHttpStatus = framesetProbe.httpStatus
     }
 
+    const isSuccess = response.status >= 200 && response.status < 300
+
     return {
       status: configuredParked
         ? 'parked'
@@ -719,8 +721,8 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
       framesetHttpStatus,
       serverHeader,
       contentType,
-      error: response.ok ? undefined : `HTTP request returned ${response.status}`,
-      errorKind: response.ok ? undefined : 'network-error',
+      error: isSuccess ? undefined : `HTTP request returned ${response.status}`,
+      errorKind: isSuccess ? undefined : 'network-error',
     }
   }
 
