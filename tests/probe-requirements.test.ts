@@ -24,6 +24,7 @@ import {
   isImplicitlyRedirectedResponse,
   normalizeProbeBatchConcurrency,
   normalizeProbeMaxAttempts,
+  shouldProbeHttpsVariant,
   normalizeDomain,
 } from '../src/lib/probe'
 
@@ -253,4 +254,11 @@ test('REQ-PROBE-024: implicit redirect detection compares effective response URL
     false
   )
   assert.equal(isImplicitlyRedirectedResponse('https://www.example.com/path', undefined), false)
+})
+
+test('REQ-PROBE-025: redirected http success should recheck the https variant', () => {
+  assert.equal(shouldProbeHttpsVariant('http://www.meineschufa.de/bonitaetsauskunft', ['http://xn--datenbersicht-0ob.de'], 200), true)
+  assert.equal(shouldProbeHttpsVariant('https://www.example.com', ['http://example.com'], 200), false)
+  assert.equal(shouldProbeHttpsVariant('http://www.example.com', [], 200), false)
+  assert.equal(shouldProbeHttpsVariant('http://www.example.com', ['http://example.com'], 404), false)
 })

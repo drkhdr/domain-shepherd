@@ -182,6 +182,20 @@ pub(crate) async fn follow_http(
             .and_then(|value| value.to_str().ok())
             .map(|value| value.to_string());
         let body_text = response.text().await.unwrap_or_default();
+
+        if status.is_success() && !redirect_chain.is_empty() && current_url.starts_with("http://") {
+            let https_url = current_url.replacen("http://", "https://", 1);
+            if https_url != current_url {
+                redirect_chain.push(RedirectChainEntry {
+                    url: current_url.clone(),
+                    response_status: Some(status.as_u16()),
+                });
+                current_url = https_url;
+                allow_http_fallback = false;
+                continue;
+            }
+        }
+
         let frameset_source_url = extract_frameset_url(final_url.as_deref(), &body_text);
         let configured_parked =
             matches_configured_parked_patterns(parked_patterns, dns_name_servers, &body_text);
