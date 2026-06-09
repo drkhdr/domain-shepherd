@@ -153,12 +153,52 @@ pub(crate) async fn follow_http(
             }
         }
 
+        let mut resolved_status = status;
+        if status.is_success() {
+            let head_response = client
+                .head(&current_url)
+                .header(ACCEPT, "text/html,*/*")
+                .send()
+                .await;
+
+            if let Ok(head_response) = head_response {
+                let head_status = head_response.status();
+                let head_location = head_response
+                    .headers()
+                    .get(LOCATION)
+                    .and_then(|value| value.to_str().ok())
+                    .map(|value| value.to_string());
+
+                if head_status.is_redirection() {
+                    if let Some(head_location) = head_location {
+                        let next_url = url::Url::parse(&current_url)
+                            .ok()
+                            .and_then(|url| url.join(&head_location).ok())
+                            .map(|url| url.to_string())
+                            .unwrap_or(head_location);
+
+                        redirect_chain.push(RedirectChainEntry {
+                            url: current_url.clone(),
+                            response_status: Some(head_status.as_u16()),
+                        });
+                        current_url = next_url;
+                        allow_http_fallback = false;
+                        continue;
+                    }
+                }
+
+                if head_status.is_client_error() || head_status.is_server_error() {
+                    resolved_status = head_status;
+                }
+            }
+        }
+
         if status.is_success() && !redirect_chain.is_empty() && current_url.starts_with("http://") {
             let https_url = current_url.replacen("http://", "https://", 1);
             if https_url != current_url {
                 redirect_chain.push(RedirectChainEntry {
                     url: current_url.clone(),
-                    response_status: Some(status.as_u16()),
+                    response_status: Some(resolved_status.as_u16()),
                 });
                 current_url = https_url;
                 allow_http_fallback = false;
@@ -203,7 +243,7 @@ pub(crate) async fn follow_http(
                     content_type.as_deref(),
                 )
             },
-            http_status: Some(status.as_u16()),
+            http_status: Some(resolved_status.as_u16()),
             redirect_chain,
             final_url,
             frameset_url,
@@ -211,12 +251,12 @@ pub(crate) async fn follow_http(
             server_header,
             content_type,
             timed_out: false,
-            error: if status.is_success() {
+            error: if resolved_status.is_success() {
                 None
             } else {
-                Some(format!("HTTP request returned {}", status.as_u16()))
+                Some(format!("HTTP request returned {}", resolved_status.as_u16()))
             },
-            error_kind: if status.is_success() {
+            error_kind: if resolved_status.is_success() {
                 None
             } else {
                 Some("network-error".to_string())

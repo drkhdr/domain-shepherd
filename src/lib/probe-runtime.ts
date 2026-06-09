@@ -83,7 +83,7 @@ function normalizeHeaderValue(value: string | string[] | undefined): string | un
   return undefined
 }
 
-async function requestHttpUrl(url: string): Promise<HttpRequestResult> {
+async function requestHttpUrl(url: string, method: 'GET' | 'HEAD' = 'GET'): Promise<HttpRequestResult> {
   const target = new URL(url)
   const transport = target.protocol === 'https:' ? await import('node:https') : await import('node:http')
 
@@ -91,7 +91,7 @@ async function requestHttpUrl(url: string): Promise<HttpRequestResult> {
     const request = transport.request(
       target,
       {
-        method: 'GET',
+        method,
         headers: {
           'user-agent': APP_USER_AGENT,
           accept: 'text/html,*/*',
@@ -704,6 +704,30 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
       }
     }
 
+    let resolvedStatus = response.status
+    if (resolvedStatus >= 200 && resolvedStatus < 300) {
+      try {
+        const headResponse = await requestHttpUrl(currentUrl, 'HEAD')
+        const headLocation = headResponse.headers.location
+        if (headLocation && headResponse.status >= 300 && headResponse.status < 400) {
+          const nextUrl = new URL(headLocation, currentUrl).toString()
+          redirectChain.push({
+            url: currentUrl,
+            responseStatus: headResponse.status,
+          })
+          currentUrl = nextUrl
+          allowHttpFallback = false
+          continue
+        }
+
+        if (headResponse.status >= 400) {
+          resolvedStatus = headResponse.status
+        }
+      } catch {
+        // Best-effort consistency check only.
+      }
+    }
+
     const finalUrl = currentUrl
     const serverHeader = response.headers.server
     const contentType = response.headers['content-type']
@@ -720,7 +744,7 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
       framesetHttpStatus = framesetProbe.httpStatus
     }
 
-    const isSuccess = response.status >= 200 && response.status < 300
+    const isSuccess = resolvedStatus >= 200 && resolvedStatus < 300
 
     return {
       status: configuredParked
@@ -728,14 +752,14 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
         : framesetUrl
           ? 'frameset'
           : classifyProbeStatus(domain, finalUrl, redirectChain, serverHeader, contentType),
-      httpStatus: response.status,
+      httpStatus: resolvedStatus,
       redirectChain,
       finalUrl,
       framesetUrl,
       framesetHttpStatus,
       serverHeader,
       contentType,
-      error: isSuccess ? undefined : `HTTP request returned ${response.status}`,
+      error: isSuccess ? undefined : `HTTP request returned ${resolvedStatus}`,
       errorKind: isSuccess ? undefined : 'network-error',
     }
   }
