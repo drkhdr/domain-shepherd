@@ -24,6 +24,7 @@ import {
   isImplicitlyRedirectedResponse,
   normalizeProbeBatchConcurrency,
   normalizeProbeMaxAttempts,
+  shouldContinueToHttpsCounterpart,
   normalizeDomain,
 } from '../src/lib/probe'
 
@@ -253,5 +254,12 @@ test('REQ-PROBE-024: implicit redirect detection compares effective response URL
     false
   )
   assert.equal(isImplicitlyRedirectedResponse('https://www.example.com/path', undefined), false)
+})
+
+test('REQ-PROBE-025: redirected HTTP success continues with explicit HTTPS counterpart request', () => {
+  assert.equal(shouldContinueToHttpsCounterpart('http://www.meineschufa.de/bonitaetsauskunft', ['http://xn--datenbersicht-0ob.de'], 200), true)
+  assert.equal(shouldContinueToHttpsCounterpart('http://www.meineschufa.de/bonitaetsauskunft', ['http://xn--datenbersicht-0ob.de'], 404), false)
+  assert.equal(shouldContinueToHttpsCounterpart('https://www.meineschufa.de/bonitaetsauskunft', ['http://xn--datenbersicht-0ob.de'], 200), false)
+  assert.equal(shouldContinueToHttpsCounterpart('http://www.meineschufa.de/bonitaetsauskunft', [], 200), false)
 })
 

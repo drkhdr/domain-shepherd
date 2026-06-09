@@ -153,6 +153,19 @@ pub(crate) async fn follow_http(
             }
         }
 
+        if status.is_success() && !redirect_chain.is_empty() && current_url.starts_with("http://") {
+            let https_url = current_url.replacen("http://", "https://", 1);
+            if https_url != current_url {
+                redirect_chain.push(RedirectChainEntry {
+                    url: current_url.clone(),
+                    response_status: Some(status.as_u16()),
+                });
+                current_url = https_url;
+                allow_http_fallback = false;
+                continue;
+            }
+        }
+
         let final_url = Some(current_url.clone());
         let server_header = response
             .headers()

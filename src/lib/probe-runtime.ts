@@ -11,6 +11,7 @@ import {
   normalizeParkedPatterns,
   normalizeProbeBatchConcurrency,
   REQUEST_TIMEOUT_MS,
+  shouldContinueToHttpsCounterpart,
   WHOIS_SERVER_OVERRIDES,
 } from '@/lib/probe'
 import type { ParkedPattern, ProbeDomainInput, ProbeErrorKind, ProbeResult, ProbeStatus, WhoisResult } from '@/lib/probe'
@@ -690,10 +691,23 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
       continue
     }
 
+    if (shouldContinueToHttpsCounterpart(currentUrl, redirectChain, response.status)) {
+      const httpsUrl = currentUrl.replace(/^http:/i, 'https:')
+      if (httpsUrl !== currentUrl) {
+        redirectChain.push({
+          url: currentUrl,
+          responseStatus: response.status,
+        })
+        currentUrl = httpsUrl
+        allowHttpFallback = false
+        continue
+      }
+    }
+
     const finalUrl = currentUrl
-  const serverHeader = response.headers.server
-  const contentType = response.headers['content-type']
-  const bodyText = response.bodyText
+    const serverHeader = response.headers.server
+    const contentType = response.headers['content-type']
+    const bodyText = response.bodyText
 
     const framesetSourceUrl = extractFramesetUrl(finalUrl, contentType, bodyText)
     const configuredParked = matchesConfiguredParkedPatterns(options?.parkedPatterns, dnsNameServers, bodyText)
