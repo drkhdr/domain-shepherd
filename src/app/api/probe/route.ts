@@ -5,6 +5,8 @@ import { isProbeDomainInput, normalizeParkedPatterns } from '@/lib/probe'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+// Keep probe results stable by running requests from a fixed Vercel region.
+export const preferredRegion = 'fra1'
 
 export async function POST(request: NextRequest) {
   try {
