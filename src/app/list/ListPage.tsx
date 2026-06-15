@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import {
   calculateWhoisSharePercent,
@@ -291,13 +292,19 @@ function ProbeBadge({
     <button
       type="button"
       onClick={onToggle}
-      title="Toggle probe details"
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-sm font-semibold ring-1 transition cursor-pointer ${cfg.badge}`}
+      title={expanded ? 'Collapse probe details' : 'Expand probe details'}
+      aria-expanded={expanded}
+      className={`inline-flex items-stretch overflow-hidden rounded-full text-xs font-semibold ring-1 transition cursor-pointer focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-100 ${cfg.badge}`}
     >
-      <span className={`inline-block h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
-      {cfg.label}
-      {badgeHttpStatus ? <span className="opacity-60">- {badgeHttpStatus}</span> : null}
-      <span className="opacity-50">{expanded ? '▴' : '▾'}</span>
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5">
+        <span className={`inline-block h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+        {cfg.label}
+        {badgeHttpStatus ? <span className="opacity-60">- {badgeHttpStatus}</span> : null}
+      </span>
+      <span className="inline-flex items-center gap-1 border-l border-white/20 px-2 py-1.5 text-[10px] uppercase tracking-[0.14em] opacity-90">
+        {expanded ? 'Hide' : 'Details'}
+        <span className="text-[11px] opacity-70">{expanded ? '▴' : '▾'}</span>
+      </span>
     </button>
   )
 }
@@ -440,6 +447,7 @@ function ProbeDetails({
   onReprobe: () => void
   reprobing: boolean
 }) {
+  const [rawTextOpen, setRawTextOpen] = useState(false)
   const whoisSharePercent = calculateWhoisSharePercent(result.probeMs, result.whoisMs)
   const redirectFull = buildRedirectChainWithFinal(result.redirectChain, result.finalUrl, result.httpStatus, result.serverHeader)
   const hasWhois = Boolean(
@@ -547,6 +555,24 @@ function ProbeDetails({
         </div>
       )}
 
+      {redirectFull.length > 1 && (
+        <div>
+          <p className="text-slate-400 mb-1">Redirect chain</p>
+          {redirectFull.map((step, i) => (
+            <div key={i} className="flex items-start gap-1.5">
+              <span className="text-slate-300 mt-px select-none">{i === redirectFull.length - 1 ? '└' : '├'}</span>
+              <span className="inline-flex max-w-full items-center gap-1.5">
+                <ExternalLink href={step.url} className="break-all text-blue-600 hover:underline">
+                  {truncate(step.url, 90)}
+                </ExternalLink>
+                <span className="text-slate-500">({step.responseStatus ?? 'unknown'})</span>
+                {step.serverHeader && <span className="text-slate-500">[{truncate(step.serverHeader, 48)}]</span>}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {hasWhois && (
         <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
           <p className="mb-1 text-slate-400">WHOIS</p>
@@ -634,31 +660,42 @@ function ProbeDetails({
             </div>
           )}
           {result.whois?.rawText && (
-            <details className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" open>
-              <summary className="cursor-pointer text-slate-500">WHOIS raw data</summary>
-              <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-700">
-                {result.whois.rawText}
-              </pre>
-            </details>
-          )}
-        </div>
-      )}
-
-      {redirectFull.length > 1 && (
-        <div>
-          <p className="text-slate-400 mb-1">Redirect chain</p>
-          {redirectFull.map((step, i) => (
-            <div key={i} className="flex items-start gap-1.5">
-              <span className="text-slate-300 mt-px select-none">{i === redirectFull.length - 1 ? '└' : '├'}</span>
-              <span className="inline-flex max-w-full items-center gap-1.5">
-                <ExternalLink href={step.url} className="break-all text-blue-600 hover:underline">
-                  {truncate(step.url, 90)}
-                </ExternalLink>
-                <span className="text-slate-500">({step.responseStatus ?? 'unknown'})</span>
-                {step.serverHeader && <span className="text-slate-500">[{truncate(step.serverHeader, 48)}]</span>}
-              </span>
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setRawTextOpen(true)}
+                className="text-[11px] text-slate-500 hover:text-slate-700 underline underline-offset-2"
+              >
+                Show raw WHOIS data
+              </button>
+              {rawTextOpen && createPortal(
+                <div
+                  className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+                  onClick={() => setRawTextOpen(false)}
+                >
+                  <div
+                    className="bg-white rounded-2xl w-full max-w-3xl max-h-[80vh] overflow-auto shadow-xl flex flex-col"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                      <span className="font-semibold text-slate-800 text-sm">WHOIS raw data — {result.domain}</span>
+                      <button
+                        type="button"
+                        onClick={() => setRawTextOpen(false)}
+                        className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <pre className="px-6 py-4 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-700 flex-1">
+                      {result.whois.rawText}
+                    </pre>
+                  </div>
+                </div>,
+                document.body
+              )}
             </div>
-          ))}
+          )}
         </div>
       )}
 
