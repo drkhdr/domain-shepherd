@@ -25,6 +25,7 @@ export interface WhoisResult {
 export interface RedirectChainEntry {
   url: string
   responseStatus?: number
+  serverHeader?: string
 }
 
 export type RedirectChainItem = string | RedirectChainEntry
@@ -221,17 +222,20 @@ export function normalizeRedirectChainItem(item: RedirectChainItem): RedirectCha
     typeof item.responseStatus === 'number' && Number.isFinite(item.responseStatus) && item.responseStatus > 0
       ? Math.trunc(item.responseStatus)
       : undefined
+  const serverHeader = typeof item.serverHeader === 'string' ? item.serverHeader.trim() : ''
 
   return {
     url,
     responseStatus,
+    serverHeader: serverHeader || undefined,
   }
 }
 
 export function buildRedirectChainWithFinal(
   redirectChain: RedirectChainItem[] | undefined,
   finalUrl?: string,
-  finalStatus?: number
+  finalStatus?: number,
+  finalServerHeader?: string
 ): RedirectChainEntry[] {
   const steps: RedirectChainEntry[] = []
 
@@ -245,9 +249,11 @@ export function buildRedirectChainWithFinal(
   if (finalUrl) {
     const responseStatus =
       typeof finalStatus === 'number' && Number.isFinite(finalStatus) && finalStatus > 0 ? Math.trunc(finalStatus) : undefined
+    const serverHeader = typeof finalServerHeader === 'string' ? finalServerHeader.trim() : ''
     steps.push({
       url: finalUrl,
       responseStatus,
+      serverHeader: serverHeader || undefined,
     })
   }
 

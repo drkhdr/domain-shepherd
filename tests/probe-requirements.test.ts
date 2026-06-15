@@ -225,22 +225,23 @@ test('REQ-PROBE-022: response badge hides volatile target code for redirected st
   assert.equal(getResponseBadgeHttpStatus('unreachable', 0), undefined)
 })
 
-test('REQ-PROBE-023: redirect chain exposes per-hop response status and appends final target status', () => {
+test('REQ-PROBE-023: redirect chain exposes per-hop status and optional server header including final target', () => {
   const chain = buildRedirectChainWithFinal(
     [
-      { url: 'http://example.com', responseStatus: 301 },
-      { url: 'https://www.example.com', responseStatus: 302 },
+      { url: 'http://example.com', responseStatus: 301, serverHeader: 'cloudflare' },
+      { url: 'https://www.example.com', responseStatus: 302, serverHeader: 'nginx' },
       'https://legacy.example.com/path',
     ],
     'https://target.example.net/',
-    200
+    200,
+    'envoy'
   )
 
   assert.deepEqual(chain, [
-    { url: 'http://example.com', responseStatus: 301 },
-    { url: 'https://www.example.com', responseStatus: 302 },
+    { url: 'http://example.com', responseStatus: 301, serverHeader: 'cloudflare' },
+    { url: 'https://www.example.com', responseStatus: 302, serverHeader: 'nginx' },
     { url: 'https://legacy.example.com/path' },
-    { url: 'https://target.example.net/', responseStatus: 200 },
+    { url: 'https://target.example.net/', responseStatus: 200, serverHeader: 'envoy' },
   ])
 })
 

@@ -146,6 +146,11 @@ pub(crate) async fn follow_http(
                 redirect_chain.push(RedirectChainEntry {
                     url: current_url.clone(),
                     response_status: Some(status.as_u16()),
+                    server_header: response
+                        .headers()
+                        .get(SERVER)
+                        .and_then(|value| value.to_str().ok())
+                        .map(|value| value.to_string()),
                 });
                 current_url = next_url;
                 allow_http_fallback = false;
@@ -180,6 +185,11 @@ pub(crate) async fn follow_http(
                         redirect_chain.push(RedirectChainEntry {
                             url: current_url.clone(),
                             response_status: Some(head_status.as_u16()),
+                            server_header: head_response
+                                .headers()
+                                .get(SERVER)
+                                .and_then(|value| value.to_str().ok())
+                                .map(|value| value.to_string()),
                         });
                         current_url = next_url;
                         allow_http_fallback = false;
@@ -199,6 +209,11 @@ pub(crate) async fn follow_http(
                 redirect_chain.push(RedirectChainEntry {
                     url: current_url.clone(),
                     response_status: Some(resolved_status.as_u16()),
+                    server_header: response
+                        .headers()
+                        .get(SERVER)
+                        .and_then(|value| value.to_str().ok())
+                        .map(|value| value.to_string()),
                 });
                 current_url = https_url;
                 allow_http_fallback = false;

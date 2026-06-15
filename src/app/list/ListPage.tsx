@@ -441,7 +441,7 @@ function ProbeDetails({
   reprobing: boolean
 }) {
   const whoisSharePercent = calculateWhoisSharePercent(result.probeMs, result.whoisMs)
-  const redirectFull = buildRedirectChainWithFinal(result.redirectChain, result.finalUrl, result.httpStatus)
+  const redirectFull = buildRedirectChainWithFinal(result.redirectChain, result.finalUrl, result.httpStatus, result.serverHeader)
   const hasWhois = Boolean(
     result.whois?.registrar ||
       result.whois?.createdAt ||
@@ -655,6 +655,7 @@ function ProbeDetails({
                   {truncate(step.url, 90)}
                 </ExternalLink>
                 <span className="text-slate-500">({step.responseStatus ?? 'unknown'})</span>
+                {step.serverHeader && <span className="text-slate-500">[{truncate(step.serverHeader, 48)}]</span>}
               </span>
             </div>
           ))}

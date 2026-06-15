@@ -685,6 +685,7 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
       redirectChain.push({
         url: currentUrl,
         responseStatus: response.status,
+        serverHeader: response.headers.server,
       })
       currentUrl = nextUrl
       allowHttpFallback = false
@@ -697,6 +698,7 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
         redirectChain.push({
           url: currentUrl,
           responseStatus: response.status,
+          serverHeader: response.headers.server,
         })
         currentUrl = httpsUrl
         allowHttpFallback = false
@@ -714,6 +716,7 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
           redirectChain.push({
             url: currentUrl,
             responseStatus: headResponse.status,
+            serverHeader: headResponse.headers.server,
           })
           currentUrl = nextUrl
           allowHttpFallback = false
