@@ -9,7 +9,6 @@ import {
   createDefaultProbeSettings,
   createProbeFailureResult,
   formatProbeProgress,
-  getResponseBadgeHttpStatus,
   getPrimaryWhoisStatus,
   matchesDomainTargetSearchFilter,
   matchesTargetStatusFilter,
@@ -289,7 +288,6 @@ function ProbeBadge({
   onToggle: () => void
 }) {
   const cfg = STATUS_CONFIG[result.status]
-  const badgeHttpStatus = getResponseBadgeHttpStatus(result.status, result.httpStatus)
   const redirectCount = result.status === 'redirected' ? (result.redirectChain?.length ?? 0) : 0
   return (
     <button
@@ -303,7 +301,6 @@ function ProbeBadge({
         <span className={`inline-block h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
         {cfg.label}
         {result.status === 'redirected' && redirectCount > 0 ? <span className="opacity-75">({redirectCount})</span> : null}
-        {badgeHttpStatus ? <span className="opacity-60">- {badgeHttpStatus}</span> : null}
       </span>
       <span className="inline-flex items-center gap-1 border-l border-white/20 px-2 py-1.5 text-[10px] uppercase tracking-[0.14em] opacity-90">
         {expanded ? 'Hide' : 'Details'}
@@ -1117,18 +1114,20 @@ export function ListPage() {
       toCsvCell(`App=${APP_NAME}`),
       toCsvCell(`Version=${APP_VERSION_WITH_GIT}`),
     ]
-    const rows = [['Domain', 'Response', 'Target', 'Frameset URL', 'Status', 'NS SLD']]
+    const rows = [['Domain', 'Response', 'Target', 'Frameset URL', 'Status', 'Redirect Count', 'NS SLD']]
     for (const row of tableRows) {
-      const response = row.probe
-        ? `${STATUS_CONFIG[row.probe.status].label}${row.code > 0 ? ` ${row.code}` : ''}`
-        : 'Not probed'
+      const response = row.probe ? STATUS_CONFIG[row.probe.status].label : 'Not probed'
+      const status = row.probe && row.displayTargetHttpStatus > 0 ? String(row.displayTargetHttpStatus) : ''
+      const redirectCountValue = row.probe?.redirectChain?.length ?? 0
+      const redirectCount = redirectCountValue > 0 ? String(redirectCountValue) : ''
 
       rows.push([
         toCsvCell(row.domain),
         toCsvCell(response),
         toCsvCell(row.displayTarget),
         toCsvCell(row.framesetUrl),
-        toCsvCell(row.whoisStatus),
+        toCsvCell(status),
+        toCsvCell(redirectCount),
         toCsvCell(row.nsSld),
       ])
     }
@@ -1374,11 +1373,6 @@ export function ListPage() {
             </div>
           </div>
           <div className="flex gap-2 justify-end">
-            {probing && probeProgress.total > 0 ? (
-              <span className="self-center text-sm font-medium text-slate-600">
-                {formatProbeProgress(probeProgress.completed, probeProgress.total)}
-              </span>
-            ) : null}
             <button
               onClick={copyCSV}
               className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-100"
