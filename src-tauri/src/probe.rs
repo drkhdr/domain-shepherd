@@ -58,17 +58,39 @@ pub async fn run_probe_batch_internal(
     Ok(ordered.into_iter().flatten().collect())
 }
 
+#[tauri::command]
+pub async fn run_probe_whois(domain: String) -> Result<types::WhoisLookupResult, String> {
+    Ok(run_probe_whois_internal(domain).await)
+}
+
+pub async fn run_probe_whois_internal(domain: String) -> types::WhoisLookupResult {
+    let normalized_domain = normalize_domain(&domain);
+    let started = Instant::now();
+
+    if normalized_domain.is_empty() {
+        return types::WhoisLookupResult {
+            domain: normalized_domain,
+            whois: WhoisResult {
+                error: Some("Invalid domain".to_string()),
+                ..WhoisResult::default()
+            },
+            whois_ms: 0,
+        };
+    }
+
+    let whois = fetch_whois(normalized_domain.clone()).await;
+    types::WhoisLookupResult {
+        domain: normalized_domain,
+        whois,
+        whois_ms: started.elapsed().as_millis() as u64,
+    }
+}
+
 async fn probe_domain(domain_input: ProbeDomainInput, parked_patterns: &[types::ParkedPattern]) -> ProbeResult {
     use types::ProbeStatus;
 
     let started = Instant::now();
     let domain = normalize_domain(&domain_input.domain);
-    let whois_domain = domain.clone();
-    let whois_handle = tokio::spawn(async move {
-        let whois_started = Instant::now();
-        let whois = fetch_whois(whois_domain).await;
-        (whois, whois_started.elapsed().as_millis() as u64)
-    });
 
     let mut result = ProbeResult {
         domain_id: domain_input.id,
@@ -109,9 +131,6 @@ async fn probe_domain(domain_input: ProbeDomainInput, parked_patterns: &[types::
             if dns.addresses.is_empty() && dns.cname.is_none() {
                 result.status = ProbeStatus::NoDns;
                 result.dns_error = dns.dns_error;
-                let (whois, whois_ms) = await_whois(whois_handle).await;
-                result.whois = Some(whois);
-                result.whois_ms = whois_ms;
                 result.probe_ms = started.elapsed().as_millis() as u64;
                 return result;
             }
@@ -132,34 +151,15 @@ async fn probe_domain(domain_input: ProbeDomainInput, parked_patterns: &[types::
             result.content_type = http.content_type;
             result.error = http.error;
             result.error_kind = http.error_kind;
-            let (whois, whois_ms) = await_whois(whois_handle).await;
-            result.whois = Some(whois);
-            result.whois_ms = whois_ms;
         }
         Err(error) => {
             result.dns_ms = dns_started.elapsed().as_millis() as u64;
             result.status = ProbeStatus::Unreachable;
             result.error = Some(error);
             result.error_kind = Some("probe-failed".to_string());
-            let (whois, whois_ms) = await_whois(whois_handle).await;
-            result.whois = Some(whois);
-            result.whois_ms = whois_ms;
         }
     }
 
     result.probe_ms = started.elapsed().as_millis() as u64;
     result
-}
-
-async fn await_whois(handle: tokio::task::JoinHandle<(WhoisResult, u64)>) -> (WhoisResult, u64) {
-    match handle.await {
-        Ok((whois, whois_ms)) => (whois, whois_ms),
-        Err(error) => (
-            WhoisResult {
-                error: Some(format!("WHOIS lookup failed: {error}")),
-                ..WhoisResult::default()
-            },
-            0,
-        ),
-    }
 }

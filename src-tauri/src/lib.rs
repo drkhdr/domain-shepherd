@@ -14,7 +14,7 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![probe::run_probe_batch])
+    .invoke_handler(tauri::generate_handler![probe::run_probe_batch, probe::run_probe_whois])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

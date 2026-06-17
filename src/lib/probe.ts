@@ -305,6 +305,18 @@ export function shouldContinueToHttpsCounterpart(
   return typeof responseStatus === 'number' && responseStatus >= 200 && responseStatus < 300
 }
 
+export function shouldFetchWhoisOnExpand(isExpanding: boolean, hasWhois: boolean, isWhoisLoading: boolean): boolean {
+  if (!isExpanding) {
+    return false
+  }
+
+  if (hasWhois) {
+    return false
+  }
+
+  return !isWhoisLoading
+}
+
 export function classifyProbeStatus(
   domain: string,
   finalUrl?: string,

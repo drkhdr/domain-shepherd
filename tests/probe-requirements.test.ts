@@ -25,6 +25,7 @@ import {
   normalizeProbeBatchConcurrency,
   normalizeProbeMaxAttempts,
   shouldContinueToHttpsCounterpart,
+  shouldFetchWhoisOnExpand,
   normalizeDomain,
 } from '../src/lib/probe'
 
@@ -262,5 +263,12 @@ test('REQ-PROBE-025: redirected HTTP success continues with explicit HTTPS count
   assert.equal(shouldContinueToHttpsCounterpart('http://www.meineschufa.de/bonitaetsauskunft', ['http://xn--datenbersicht-0ob.de'], 404), false)
   assert.equal(shouldContinueToHttpsCounterpart('https://www.meineschufa.de/bonitaetsauskunft', ['http://xn--datenbersicht-0ob.de'], 200), false)
   assert.equal(shouldContinueToHttpsCounterpart('http://www.meineschufa.de/bonitaetsauskunft', [], 200), false)
+})
+
+test('REQ-PROBE-026: WHOIS fetch is deferred until details expansion and only requested once per expansion state', () => {
+  assert.equal(shouldFetchWhoisOnExpand(false, false, false), false)
+  assert.equal(shouldFetchWhoisOnExpand(true, true, false), false)
+  assert.equal(shouldFetchWhoisOnExpand(true, false, true), false)
+  assert.equal(shouldFetchWhoisOnExpand(true, false, false), true)
 })
 

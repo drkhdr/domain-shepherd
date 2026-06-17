@@ -102,6 +102,14 @@ pub struct ProbeResult {
     pub(crate) probe_ms: u64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WhoisLookupResult {
+    pub(crate) domain: String,
+    pub(crate) whois: WhoisResult,
+    pub(crate) whois_ms: u64,
+}
+
 #[derive(Debug)]
 pub(crate) struct DnsLookupResult {
     pub(crate) addresses: Vec<String>,

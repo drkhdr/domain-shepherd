@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import test from 'node:test'
 
-import { runProbeBatch } from '../src/lib/probe-runtime'
+import { lookupWhois, runProbeBatch } from '../src/lib/probe-runtime'
 import type { ProbeDomainInput, ProbeResult, RedirectChainItem } from '../src/lib/probe'
 
 const PARITY_DOMAINS: ProbeDomainInput[] = [
@@ -62,6 +62,33 @@ async function runRustParityProbe(domains: ProbeDomainInput[]): Promise<ProbeRes
   return Array.isArray(parsed) ? (parsed as ProbeResult[]) : []
 }
 
+async function runRustWhoisParityProbe(domain: string): Promise<{ domain: string; whois: ProbeResult['whois']; whoisMs: number }> {
+  const binaryPath = path.join(
+    process.cwd(),
+    'src-tauri',
+    'target',
+    'debug',
+    process.platform === 'win32' ? 'parity_whois.exe' : 'parity_whois'
+  )
+
+  const stdout = execFileSync(binaryPath, [], {
+    cwd: process.cwd(),
+    maxBuffer: 1024 * 1024 * 8,
+    encoding: 'utf8',
+    input: domain,
+    timeout: 120000,
+  })
+
+  const parsed = JSON.parse(stdout) as unknown
+  const payload = (parsed ?? {}) as { domain?: unknown; whois?: unknown; whoisMs?: unknown }
+
+  return {
+    domain: typeof payload.domain === 'string' ? payload.domain : '',
+    whois: (payload.whois ?? {}) as ProbeResult['whois'],
+    whoisMs: typeof payload.whoisMs === 'number' ? payload.whoisMs : 0,
+  }
+}
+
 test('REQ-PROBE-011: node and rust probe runtimes stay parity-compatible', async () => {
   const [nodeResults, rustResults] = await Promise.all([
     runProbeBatch(PARITY_DOMAINS),
@@ -112,16 +139,8 @@ test('REQ-PROBE-011: node and rust probe runtimes stay parity-compatible', async
       mismatches.push(`${domain.domain}: dnsNameServers mismatch node=${nodeNs.join(',')} rust=${rustNs.join(',')}`)
     }
 
-    const nodeWhoisServer = (node.whois?.server || '').toLowerCase()
-    const rustWhoisServer = (rust.whois?.server || '').toLowerCase()
-    if (nodeWhoisServer !== rustWhoisServer) {
-      mismatches.push(`${domain.domain}: whois.server mismatch node=${nodeWhoisServer} rust=${rustWhoisServer}`)
-    }
-
-    const nodeRaw = Boolean(node.whois?.rawText)
-    const rustRaw = Boolean(rust.whois?.rawText)
-    if (nodeRaw !== rustRaw) {
-      mismatches.push(`${domain.domain}: whois.rawText presence mismatch node=${nodeRaw} rust=${rustRaw}`)
+    if (node.whois || rust.whois) {
+      mismatches.push(`${domain.domain}: whois payload unexpectedly present in batch probe result`)
     }
   }
 
@@ -133,14 +152,11 @@ test('REQ-PROBE-011: node and rust probe runtimes stay parity-compatible', async
 })
 
 test('REQ-PROBE-017: .info WHOIS parity avoids RDAP redirect-only errors', async () => {
-  const domains: ProbeDomainInput[] = [{ id: 'info-1', domain: 'deineschufa.info' }]
-  const [nodeResults, rustResults] = await Promise.all([runProbeBatch(domains), runRustParityProbe(domains)])
+  const domain = 'deineschufa.info'
+  const [nodeWhois, rustWhois] = await Promise.all([lookupWhois(domain), runRustWhoisParityProbe(domain)])
 
-  assert.equal(nodeResults.length, 1)
-  assert.equal(rustResults.length, 1)
-
-  const nodeWhoisError = nodeResults[0].whois?.error || ''
-  const rustWhoisError = rustResults[0].whois?.error || ''
+  const nodeWhoisError = nodeWhois.whois?.error || ''
+  const rustWhoisError = rustWhois.whois?.error || ''
 
   assert.equal(
     rustWhoisError,

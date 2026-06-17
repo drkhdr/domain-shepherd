@@ -1,6 +1,6 @@
 {
   "name": "domainshepherd",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "scripts": {
     "dev": "node scripts/run-next-with-git-meta.mjs dev",

@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 import {
@@ -16,6 +16,7 @@ import {
   normalizeParkedPatterns,
   normalizeDomain,
   normalizeProbeBatchConcurrency,
+  shouldFetchWhoisOnExpand,
   PROBE_BATCH_CONCURRENCY_MAX,
   PROBE_BATCH_CONCURRENCY_MIN,
   normalizeProbeMaxAttempts,
@@ -27,6 +28,7 @@ import {
   getWhoisStatusFamily,
 } from '@/lib/probe'
 import type { ParkedPattern, ProbeDomainInput, ProbeResult, ProbeStatus, SortDirection, SortKey, TargetStatusFilter } from '@/lib/probe'
+import type { WhoisResult } from '@/lib/probe'
 import {
   APP_NAME,
   APP_VERSION_WITH_GIT,
@@ -288,6 +290,7 @@ function ProbeBadge({
 }) {
   const cfg = STATUS_CONFIG[result.status]
   const badgeHttpStatus = getResponseBadgeHttpStatus(result.status, result.httpStatus)
+  const redirectCount = result.status === 'redirected' ? (result.redirectChain?.length ?? 0) : 0
   return (
     <button
       type="button"
@@ -299,6 +302,7 @@ function ProbeBadge({
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5">
         <span className={`inline-block h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
         {cfg.label}
+        {result.status === 'redirected' && redirectCount > 0 ? <span className="opacity-75">({redirectCount})</span> : null}
         {badgeHttpStatus ? <span className="opacity-60">- {badgeHttpStatus}</span> : null}
       </span>
       <span className="inline-flex items-center gap-1 border-l border-white/20 px-2 py-1.5 text-[10px] uppercase tracking-[0.14em] opacity-90">
@@ -353,104 +357,22 @@ function InfoHint({ text }: { text: string }) {
   )
 }
 
-function WhoisStatusChip({
-  status,
-  family,
-  definition,
-}: {
-  status: string
-  family: WhoisStatusFamily
-  definition: string
-}) {
-  const buttonRef = useRef<HTMLButtonElement | null>(null)
-  const [isTooltipOpen, setIsTooltipOpen] = useState(false)
-  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null)
-
-  function updateTooltipPosition() {
-    const button = buttonRef.current
-    if (!button || typeof window === 'undefined') {
-      return
-    }
-
-    const rect = button.getBoundingClientRect()
-    const tooltipWidth = Math.min(320, window.innerWidth - 16)
-    const left = Math.min(Math.max(8, rect.left), window.innerWidth - tooltipWidth - 8)
-    const top = rect.bottom + 8
-
-    setTooltipPosition({ top, left })
-  }
-
-  function openTooltip() {
-    updateTooltipPosition()
-    setIsTooltipOpen(true)
-  }
-
-  function closeTooltip() {
-    setIsTooltipOpen(false)
-  }
-
-  useEffect(() => {
-    if (!isTooltipOpen) {
-      return
-    }
-
-    const handleViewportChange = () => updateTooltipPosition()
-    window.addEventListener('scroll', handleViewportChange, true)
-    window.addEventListener('resize', handleViewportChange)
-
-    return () => {
-      window.removeEventListener('scroll', handleViewportChange, true)
-      window.removeEventListener('resize', handleViewportChange)
-    }
-  }, [isTooltipOpen])
-
-  return (
-    <span className="relative inline-flex items-center">
-      <button
-        ref={buttonRef}
-        type="button"
-        onMouseEnter={openTooltip}
-        onMouseLeave={closeTooltip}
-        onFocus={openTooltip}
-        onBlur={closeTooltip}
-        className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-        aria-label={`WHOIS status ${status}. ${family}. ${definition}`}
-        aria-describedby={isTooltipOpen ? `whois-tooltip-${status}` : undefined}
-      >
-        {status}
-      </button>
-      {isTooltipOpen && tooltipPosition && (
-        <span
-          id={`whois-tooltip-${status}`}
-          role="tooltip"
-          className="pointer-events-none fixed z-[200] rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-xs leading-5 text-slate-700 shadow-lg"
-          style={{
-            top: tooltipPosition.top,
-            left: tooltipPosition.left,
-            width: 'min(20rem, calc(100vw - 1rem))',
-          }}
-        >
-          <span className="block font-semibold text-slate-900">{family}</span>
-          <span className="mt-1 block">{definition}</span>
-        </span>
-      )}
-    </span>
-  )
-}
-
 function ProbeDetails({
   result,
   onReprobe,
   reprobing,
+  whoisLoading,
 }: {
   result: ProbeResult
   onReprobe: () => void
   reprobing: boolean
+  whoisLoading: boolean
 }) {
   const [rawTextOpen, setRawTextOpen] = useState(false)
   const whoisSharePercent = calculateWhoisSharePercent(result.probeMs, result.whoisMs)
   const redirectFull = buildRedirectChainWithFinal(result.redirectChain, result.finalUrl, result.httpStatus, result.serverHeader)
   const hasWhois = Boolean(
+    whoisLoading ||
     result.whois?.registrar ||
       result.whois?.createdAt ||
       result.whois?.updatedAt ||
@@ -576,6 +498,7 @@ function ProbeDetails({
       {hasWhois && (
         <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
           <p className="mb-1 text-slate-400">WHOIS</p>
+          {whoisLoading && <p className="text-slate-500">Loading WHOIS data...</p>}
           <div className="flex flex-wrap gap-x-6 gap-y-1">
             {result.whois?.registrar && (
               <span>
@@ -775,12 +698,50 @@ async function runProbeViaServer(
   return Array.isArray(payload.results) ? (payload.results as ProbeResult[]) : []
 }
 
+async function runWhoisViaTauri(domain: string): Promise<{ domain: string; whois: WhoisResult; whoisMs: number }> {
+  if (!isTauriRuntime()) {
+    throw new Error('Tauri runtime not available.')
+  }
+
+  const { invoke } = await import('@tauri-apps/api/core')
+  const payload = await invoke('run_probe_whois', { domain })
+  const result = (payload ?? {}) as { domain?: unknown; whois?: unknown; whoisMs?: unknown }
+
+  return {
+    domain: typeof result.domain === 'string' ? result.domain : '',
+    whois: (result.whois ?? {}) as WhoisResult,
+    whoisMs: typeof result.whoisMs === 'number' ? result.whoisMs : 0,
+  }
+}
+
+async function runWhoisViaServer(domain: string): Promise<{ domain: string; whois: WhoisResult; whoisMs: number }> {
+  const response = await fetch('/api/probe/whois', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ domain }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as { error?: string; domain?: unknown; whois?: unknown; whoisMs?: unknown }
+  if (!response.ok) {
+    throw new Error(payload?.error || 'WHOIS lookup failed')
+  }
+
+  return {
+    domain: typeof payload.domain === 'string' ? payload.domain : '',
+    whois: (payload.whois ?? {}) as WhoisResult,
+    whoisMs: typeof payload.whoisMs === 'number' ? payload.whoisMs : 0,
+  }
+}
+
 export function ListPage() {
   const [list, setList] = useState<DomainListResponse | null>(null)
   const [probeResults, setProbeResults] = useState<Record<string, ProbeResult>>({})
   const [loading, setLoading] = useState(true)
   const [probing, setProbing] = useState(false)
   const [singleProbeIds, setSingleProbeIds] = useState<Record<string, true>>({})
+  const [whoisLoadingIds, setWhoisLoadingIds] = useState<Record<string, true>>({})
   const [probeProgress, setProbeProgress] = useState<{ completed: number; total: number }>({ completed: 0, total: 0 })
   const [clearing, setClearing] = useState(false)
   const [copyFeedback, setCopyFeedback] = useState<string>('')
@@ -938,14 +899,15 @@ export function ListPage() {
     })
   }
 
-  async function probeAll() {
-    if (!list || list.domains.length === 0) return
+  async function probeSelected() {
+    if (!list || tableRows.length === 0) return
 
     setProbing(true)
     setExpandedProbeId('')
     setSingleProbeIds({})
+    setWhoisLoadingIds({})
     try {
-      const probeInput: ProbeDomainInput[] = list.domains.map(({ id, domain }) => ({ id, domain }))
+      const probeInput: ProbeDomainInput[] = tableRows.map(({ id, probeDomain }) => ({ id, domain: probeDomain }))
       const batchConcurrency = normalizeProbeBatchConcurrency(settings.batchConcurrency)
       const maxAttempts = normalizeProbeMaxAttempts(settings.maxAttempts)
       const parkedPatterns = normalizeParkedPatterns(settings.parkedPatterns)
@@ -954,7 +916,6 @@ export function ListPage() {
       const allResults: ProbeResult[] = []
 
       setProbeProgress({ completed: 0, total })
-      setProbeResults({})
 
       const runBatch = async (domains: ProbeDomainInput[]): Promise<ProbeResult[]> => {
         if (isTauriRuntime()) {
@@ -1013,9 +974,9 @@ export function ListPage() {
         setProbeProgress({ completed, total })
       }
 
-      showTransientFeedback(`Probed ${allResults.length} domain${allResults.length === 1 ? '' : 's'}.`)
+      showTransientFeedback(`Probed ${allResults.length} selected domain${allResults.length === 1 ? '' : 's'}.`)
     } catch (error) {
-      console.error('Failed to probe domains:', error)
+      console.error('Failed to probe selected domains:', error)
       showTransientFeedback(error instanceof Error ? error.message : 'Probe failed.')
     } finally {
       setProbing(false)
@@ -1067,6 +1028,62 @@ export function ListPage() {
     }
   }
 
+  async function loadWhoisForDomain(domainId: string, domain: string) {
+    if (whoisLoadingIds[domainId]) {
+      return
+    }
+
+    const current = probeResults[domainId]
+    if (!current || current.whois) {
+      return
+    }
+
+    setWhoisLoadingIds((prev) => ({ ...prev, [domainId]: true }))
+    try {
+      const whoisResult = isTauriRuntime() ? await runWhoisViaTauri(domain) : await runWhoisViaServer(domain)
+
+      setProbeResults((prev) => {
+        const existing = prev[domainId]
+        if (!existing) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          [domainId]: {
+            ...existing,
+            whois: whoisResult.whois,
+            whoisMs: whoisResult.whoisMs,
+          },
+        }
+      })
+    } catch (error) {
+      setProbeResults((prev) => {
+        const existing = prev[domainId]
+        if (!existing) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          [domainId]: {
+            ...existing,
+            whois: {
+              error: error instanceof Error ? error.message : 'WHOIS lookup failed',
+            },
+            whoisMs: 0,
+          },
+        }
+      })
+    } finally {
+      setWhoisLoadingIds((prev) => {
+        const next = { ...prev }
+        delete next[domainId]
+        return next
+      })
+    }
+  }
+
   async function clearAllDomains() {
     if (!list || list.domains.length === 0) return
     if (!confirm(`Clear all ${list.domains.length} domains from the list?`)) return
@@ -1083,6 +1100,7 @@ export function ListPage() {
       setList(emptyList)
       setProbeResults({})
       setSingleProbeIds({})
+      setWhoisLoadingIds({})
       setExpandedProbeId('')
     } catch (error) {
       console.error('Failed to clear domains:', error)
@@ -1374,19 +1392,22 @@ export function ListPage() {
               Export CSV
             </button>
             <button
-              onClick={probeAll}
-              disabled={probing}
+              onClick={probeSelected}
+              disabled={probing || tableRows.length === 0}
               className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 disabled:cursor-not-allowed disabled:bg-blue-400"
             >
               {probing && probeProgress.total > 0
                 ? `Probing... (${formatProbeProgress(probeProgress.completed, probeProgress.total)})`
-                : 'Probe All'}
+                : 'Probe Selected'}
             </button>
           </div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="shrink-0 flex flex-nowrap items-center gap-3 overflow-x-auto border-b border-slate-200 bg-slate-50 p-3">
+            <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+              {tableRows.length} / {list?.domains.length ?? 0} domains
+            </span>
             <input
               value={filterText}
               onChange={(event) => setFilterText(event.target.value)}
@@ -1455,11 +1476,6 @@ export function ListPage() {
                   </th>
                   <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-left">
-                    <button type="button" className="hover:text-slate-800" onClick={() => toggleSort('whoisStatus')}>
-                      Registrar Status {getSortMarker('whoisStatus')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left">
                     <button type="button" className="hover:text-slate-800" onClick={() => toggleSort('nsSld')}>
                       NS SLD {getSortMarker('nsSld')}
                     </button>
@@ -1471,7 +1487,7 @@ export function ListPage() {
               <tbody>
                 {tableRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
                       {list?.domains.length ? 'No domains match the current filter.' : 'No domains yet. Add some to get started.'}
                     </td>
                   </tr>
@@ -1496,7 +1512,18 @@ export function ListPage() {
                               <ProbeBadge
                                 result={row.probe}
                                 expanded={isExpanded}
-                                onToggle={() => setExpandedProbeId((prev) => (prev === row.id ? '' : row.id))}
+                                onToggle={() => {
+                                  setExpandedProbeId((prev) => {
+                                    const nextExpandedId = prev === row.id ? '' : row.id
+                                    if (
+                                      row.probe &&
+                                      shouldFetchWhoisOnExpand(nextExpandedId === row.id, Boolean(row.probe.whois), Boolean(whoisLoadingIds[row.id]))
+                                    ) {
+                                      void loadWhoisForDomain(row.id, row.probeDomain)
+                                    }
+                                    return nextExpandedId
+                                  })
+                                }}
                               />
                             ) : (
                               <button
@@ -1527,17 +1554,6 @@ export function ListPage() {
                           </td>
                           <td className="px-4 py-2.5 text-sm align-middle">
                             {row.probe ? <UrlStatusPill code={row.displayTargetHttpStatus} /> : <span className="text-sm text-slate-400">-</span>}
-                          </td>
-                          <td className="px-4 py-2.5 text-sm align-middle">
-                            {row.whoisStatus ? (
-                              <WhoisStatusChip
-                                status={row.whoisStatus}
-                                family={row.whoisStatusInfo.family}
-                                definition={row.whoisStatusInfo.definition}
-                              />
-                            ) : (
-                              <span className="text-sm text-slate-400">-</span>
-                            )}
                           </td>
                           <td className="px-4 py-2.5 text-sm align-middle">
                             {row.nsSldList.length > 0 ? (
@@ -1577,11 +1593,12 @@ export function ListPage() {
 
                         {isExpanded && row.probe && (
                           <tr className="border-t border-slate-100">
-                            <td colSpan={8} className="px-0 py-0">
+                            <td colSpan={7} className="px-0 py-0">
                               <ProbeDetails
                                 result={row.probe}
                                 onReprobe={() => probeSingleDomain({ id: row.id, domain: row.probeDomain })}
                                 reprobing={Boolean(singleProbeIds[row.id]) || probing}
+                                whoisLoading={Boolean(whoisLoadingIds[row.id])}
                               />
                             </td>
                           </tr>

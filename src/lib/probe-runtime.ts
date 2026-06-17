@@ -38,6 +38,12 @@ interface ProbeRuntimeOptions {
   parkedPatterns?: ParkedPattern[]
 }
 
+export interface WhoisLookupResult {
+  domain: string
+  whois: WhoisResult
+  whoisMs: number
+}
+
 interface DnsLookupResult {
   addresses: string[]
   cname?: string
@@ -779,10 +785,6 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
 export async function probeDomain(domainInput: ProbeDomainInput, options?: ProbeRuntimeOptions): Promise<ProbeResult> {
   const startedAt = Date.now()
   const domain = normalizeDomain(domainInput.domain)
-  const whoisStartedAt = Date.now()
-  const whoisPromise = fetchWhois(domain)
-    .then((whois) => ({ whois, whoisMs: Date.now() - whoisStartedAt }))
-    .catch(() => ({ whois: { error: 'WHOIS lookup failed' } as WhoisResult, whoisMs: Date.now() - whoisStartedAt }))
 
   const result: ProbeResult = {
     domainId: domainInput.id,
@@ -808,9 +810,6 @@ export async function probeDomain(domainInput: ProbeDomainInput, options?: Probe
     if (result.ipAddresses.length === 0 && !result.cname) {
       result.status = 'no-dns'
       result.dnsError = dns.dnsError || 'No DNS records found'
-      const whoisResult = await whoisPromise
-      result.whois = whoisResult.whois
-      result.whoisMs = whoisResult.whoisMs
       result.probeMs = Date.now() - startedAt
       return result
     }
@@ -828,20 +827,44 @@ export async function probeDomain(domainInput: ProbeDomainInput, options?: Probe
     result.contentType = httpProbe.contentType
     result.error = httpProbe.error
     result.errorKind = httpProbe.errorKind
-    const whoisResult = await whoisPromise
-    result.whois = whoisResult.whois
-    result.whoisMs = whoisResult.whoisMs
   } catch (error) {
     result.status = 'unreachable'
     result.error = error instanceof Error ? error.message : 'Probe failed'
     result.errorKind = 'probe-failed'
-    const whoisResult = await whoisPromise
-    result.whois = whoisResult.whois
-    result.whoisMs = whoisResult.whoisMs
   }
 
   result.probeMs = Date.now() - startedAt
   return result
+}
+
+export async function lookupWhois(domainInput: string): Promise<WhoisLookupResult> {
+  const domain = normalizeDomain(domainInput)
+  const startedAt = Date.now()
+
+  if (!domain) {
+    return {
+      domain,
+      whois: { error: 'Invalid domain' },
+      whoisMs: 0,
+    }
+  }
+
+  try {
+    const whois = await fetchWhois(domain)
+    return {
+      domain,
+      whois,
+      whoisMs: Date.now() - startedAt,
+    }
+  } catch (error) {
+    return {
+      domain,
+      whois: {
+        error: error instanceof Error ? error.message : 'WHOIS lookup failed',
+      },
+      whoisMs: Date.now() - startedAt,
+    }
+  }
 }
 
 export async function runProbeBatch(domains: unknown, concurrency?: unknown, options?: ProbeRuntimeOptions): Promise<ProbeResult[]> {

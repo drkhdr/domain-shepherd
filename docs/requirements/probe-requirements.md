@@ -43,7 +43,7 @@ This document is the formal behavior contract for probe logic.
 
 ## REQ-PROBE-011 Node-Rust Probe Parity Regression
 - A dedicated regression suite must execute the same domain set against Node probe runtime and Rust probe runtime.
-- The suite must assert parity for core output semantics at minimum: status, final URL, redirect chain, DNS name server set, WHOIS server, and WHOIS raw text availability.
+- The suite must assert parity for core probe output semantics at minimum: status, final URL, redirect chain, and DNS name server set.
 
 ## REQ-PROBE-012 Probe Progress Label
 - Probe progress label formatting must output "x von N".
@@ -105,3 +105,7 @@ This document is the formal behavior contract for probe logic.
 ## REQ-PROBE-025 Explicit HTTPS Counterpart Continuation
 - If a redirected chain reaches an HTTP URL with a terminal 2xx response, probing must issue an explicit separate request to the HTTPS counterpart URL.
 - When this continuation is performed, the HTTP URL must remain in the redirect chain with its observed HTTP status.
+
+## REQ-PROBE-026 Deferred WHOIS Lookup Trigger
+- Batch and single probe execution must not request WHOIS data by default.
+- WHOIS lookup must be triggered only when a domain details row is expanded, and only if WHOIS data is not already present and not already loading.
