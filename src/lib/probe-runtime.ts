@@ -10,6 +10,9 @@ import {
   normalizeDomain,
   normalizeParkedPatterns,
   normalizeProbeBatchConcurrency,
+  parseRetryAfterMs,
+  RATE_LIMIT_DELAY_MAX_MS,
+  RATE_LIMIT_RETRY_MAX,
   REQUEST_TIMEOUT_MS,
   shouldContinueToHttpsCounterpart,
   WHOIS_SERVER_OVERRIDES,
@@ -75,6 +78,22 @@ interface HttpRequestResult {
   status: number
   headers: Record<string, string>
   bodyText: string
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function requestHttpUrlWithRateLimit(url: string, method: 'GET' | 'HEAD' = 'GET'): Promise<HttpRequestResult> {
+  for (let attempt = 0; attempt <= RATE_LIMIT_RETRY_MAX; attempt += 1) {
+    const response = await requestHttpUrl(url, method)
+    if (response.status !== 429 || attempt >= RATE_LIMIT_RETRY_MAX) {
+      return response
+    }
+    const delayMs = Math.min(parseRetryAfterMs(response.headers['retry-after']), RATE_LIMIT_DELAY_MAX_MS)
+    await sleep(delayMs)
+  }
+  return requestHttpUrl(url, method)
 }
 
 function normalizeHeaderValue(value: string | string[] | undefined): string | undefined {
@@ -665,7 +684,7 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
   for (let attempt = 0; attempt <= MAX_REDIRECTS; attempt += 1) {
     let response: HttpRequestResult
     try {
-      response = await requestHttpUrl(currentUrl)
+      response = await requestHttpUrlWithRateLimit(currentUrl)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Request failed'
       if (allowHttpFallback && currentUrl.startsWith('https://')) {
@@ -715,7 +734,7 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
     let resolvedStatus = response.status
     if (resolvedStatus >= 200 && resolvedStatus < 300) {
       try {
-        const headResponse = await requestHttpUrl(currentUrl, 'HEAD')
+        const headResponse = await requestHttpUrlWithRateLimit(currentUrl, 'HEAD')
         const headLocation = headResponse.headers.location
         if (headLocation && headResponse.status >= 300 && headResponse.status < 400) {
           const nextUrl = new URL(headLocation, currentUrl).toString()

@@ -109,3 +109,11 @@ This document is the formal behavior contract for probe logic.
 ## REQ-PROBE-026 Deferred WHOIS Lookup Trigger
 - Batch and single probe execution must not request WHOIS data by default.
 - WHOIS lookup must be triggered only when a domain details row is expanded, and only if WHOIS data is not already present and not already loading.
+
+## REQ-PROBE-027 Rate Limit Retry on 429
+- When an HTTP request returns status 429 (Too Many Requests), probing must retry the same URL after a delay.
+- The delay must be sourced from the `Retry-After` response header when present: a numeric value is interpreted as seconds; an HTTP date is interpreted as the target time to wait until.
+- If the `Retry-After` header is absent or unparseable, a default delay of 5 seconds must be used.
+- The delay must be capped at 30 seconds regardless of the header value.
+- A maximum of 2 rate-limit retries per URL is permitted.
+- Rate-limit retries must not consume redirect slots.

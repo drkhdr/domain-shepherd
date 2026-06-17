@@ -1243,6 +1243,17 @@ export function ListPage() {
     }))
   }
 
+  const targetCodeFilterOptions = useMemo<number[]>(() => {
+    if (!list) return []
+    const codes = new Set<number>()
+    for (const domain of list.domains) {
+      const probe = probeResults[domain.id]
+      const code = probe?.status === 'frameset' ? (probe?.framesetHttpStatus ?? 0) : (probe?.httpStatus ?? 0)
+      if (code > 0) codes.add(code)
+    }
+    return Array.from(codes).sort((a, b) => a - b)
+  }, [list, probeResults])
+
   const nsSldFilterOptions = useMemo<string[]>(() => {
     if (!list) {
       return []
@@ -1323,6 +1334,8 @@ export function ListPage() {
           return dir * (a.code - b.code)
         case 'target':
           return dir * a.displayTarget.localeCompare(b.displayTarget)
+        case 'targetCode':
+          return dir * (a.displayTargetHttpStatus - b.displayTargetHttpStatus)
         case 'whoisStatus':
           return dir * a.whoisStatus.localeCompare(b.whoisStatus)
         case 'nsSld':
@@ -1430,10 +1443,19 @@ export function ListPage() {
             >
               <option value="all">All target statuses</option>
               <option value="none">No target status</option>
-              <option value="2xx">Target 2xx</option>
-              <option value="3xx">Target 3xx</option>
-              <option value="4xx">Target 4xx</option>
-              <option value="5xx">Target 5xx</option>
+              <optgroup label="By range">
+                <option value="2xx">Target 2xx</option>
+                <option value="3xx">Target 3xx</option>
+                <option value="4xx">Target 4xx</option>
+                <option value="5xx">Target 5xx</option>
+              </optgroup>
+              {targetCodeFilterOptions.length > 0 && (
+                <optgroup label="Specific codes">
+                  {targetCodeFilterOptions.map((code) => (
+                    <option key={code} value={String(code)}>Target {code}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             <select
               value={nsSldFilter}
@@ -1468,7 +1490,11 @@ export function ListPage() {
                       Target {getSortMarker('target')}
                     </button>
                   </th>
-                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">
+                    <button type="button" className="hover:text-slate-800" onClick={() => toggleSort('targetCode')}>
+                      Status {getSortMarker('targetCode')}
+                    </button>
+                  </th>
                   <th className="px-4 py-3 text-left">
                     <button type="button" className="hover:text-slate-800" onClick={() => toggleSort('nsSld')}>
                       NS SLD {getSortMarker('nsSld')}

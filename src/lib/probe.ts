@@ -1,6 +1,6 @@
 export type ProbeStatus = 'ok' | 'redirected' | 'parked' | 'frameset' | 'unreachable' | 'no-dns' | 'timeout'
 export type ProbeErrorKind = 'request-timeout' | 'network-error' | 'redirect-limit' | 'probe-failed'
-export type SortKey = 'domain' | 'status' | 'code' | 'target' | 'whoisStatus' | 'nsSld'
+export type SortKey = 'domain' | 'status' | 'code' | 'target' | 'targetCode' | 'whoisStatus' | 'nsSld'
 export type SortDirection = 'asc' | 'desc'
 export type WhoisStatusFamily = 'ICANN EPP' | 'DENIC' | 'Unknown'
 
@@ -138,6 +138,9 @@ const DENIC_STATUS_DEFINITIONS_NORMALIZED: Record<string, string> = Object.fromE
 
 export const MAX_REDIRECTS = 8
 export const REQUEST_TIMEOUT_MS = 12_000
+export const RATE_LIMIT_RETRY_MAX = 2
+export const RATE_LIMIT_DELAY_DEFAULT_MS = 5_000
+export const RATE_LIMIT_DELAY_MAX_MS = 30_000
 const PROBE_BATCH_CONCURRENCY_FALLBACK = 10
 export const PROBE_BATCH_CONCURRENCY_MIN = 1
 export const PROBE_BATCH_CONCURRENCY_MAX = 50
@@ -590,7 +593,7 @@ export function isExplicitRequestTimeoutError(error: unknown): boolean {
   return candidate.name === 'TimeoutError'
 }
 
-export type TargetStatusFilter = 'all' | 'none' | '2xx' | '3xx' | '4xx' | '5xx'
+export type TargetStatusFilter = 'all' | 'none' | '2xx' | '3xx' | '4xx' | '5xx' | (string & {})
 
 export function matchesTargetStatusFilter(statusCode: number | undefined, filter: TargetStatusFilter): boolean {
   if (filter === 'all') {
@@ -618,7 +621,29 @@ export function matchesTargetStatusFilter(statusCode: number | undefined, filter
     return code >= 500 && code < 600
   }
 
+  const specific = parseInt(filter, 10)
+  if (!isNaN(specific)) {
+    return code === specific
+  }
+
   return true
+}
+
+export function parseRetryAfterMs(header: string | undefined): number {
+  if (!header) return RATE_LIMIT_DELAY_DEFAULT_MS
+
+  const seconds = parseInt(header, 10)
+  if (!isNaN(seconds) && seconds >= 0) {
+    return seconds * 1000
+  }
+
+  const date = new Date(header)
+  if (!isNaN(date.getTime())) {
+    const delayMs = date.getTime() - Date.now()
+    return delayMs > 0 ? delayMs : RATE_LIMIT_DELAY_DEFAULT_MS
+  }
+
+  return RATE_LIMIT_DELAY_DEFAULT_MS
 }
 
 export function matchesDomainTargetSearchFilter(domain: string, target: string, query: string): boolean {

@@ -17,8 +17,11 @@ import {
   matchesConfiguredParkedPatterns,
   matchesTargetStatusFilter,
   normalizeParkedPatterns,
+  parseRetryAfterMs,
   PROBE_BATCH_CONCURRENCY_DEFAULT,
   PROBE_MAX_ATTEMPTS_DEFAULT,
+  RATE_LIMIT_DELAY_DEFAULT_MS,
+  RATE_LIMIT_DELAY_MAX_MS,
   getWhoisStatusDefinition,
   getWhoisStatusFamily,
   isImplicitlyRedirectedResponse,
@@ -270,5 +273,17 @@ test('REQ-PROBE-026: WHOIS fetch is deferred until details expansion and only re
   assert.equal(shouldFetchWhoisOnExpand(true, true, false), false)
   assert.equal(shouldFetchWhoisOnExpand(true, false, true), false)
   assert.equal(shouldFetchWhoisOnExpand(true, false, false), true)
+})
+
+test('REQ-PROBE-027: parseRetryAfterMs parses Retry-After header values', () => {
+  assert.equal(parseRetryAfterMs(undefined), RATE_LIMIT_DELAY_DEFAULT_MS)
+  assert.equal(parseRetryAfterMs(''), RATE_LIMIT_DELAY_DEFAULT_MS)
+  assert.equal(parseRetryAfterMs('30'), 30_000)
+  assert.equal(parseRetryAfterMs('0'), 0)
+  assert.equal(parseRetryAfterMs('unparseable'), RATE_LIMIT_DELAY_DEFAULT_MS)
+  // HTTP date: should return a positive delay for a future date, capped to max in practice
+  const futureDate = new Date(Date.now() + 10_000).toUTCString()
+  const parsed = parseRetryAfterMs(futureDate)
+  assert.ok(parsed > 0 && parsed <= RATE_LIMIT_DELAY_MAX_MS, `expected delay in (0, ${RATE_LIMIT_DELAY_MAX_MS}], got ${parsed}`)
 })
 

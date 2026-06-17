@@ -1,7 +1,8 @@
 use reqwest::header::{ACCEPT, LOCATION, SERVER, USER_AGENT};
 use reqwest::Client;
+use tokio::time::{sleep, Duration};
 
-use super::constants::{APP_USER_AGENT, MAX_REDIRECTS, REQUEST_TIMEOUT_MS};
+use super::constants::{APP_USER_AGENT, MAX_REDIRECTS, RATE_LIMIT_DELAY_DEFAULT_MS, RATE_LIMIT_DELAY_MAX_MS, RATE_LIMIT_RETRY_MAX, REQUEST_TIMEOUT_MS};
 use super::types::{HttpProbeResult, RedirectChainEntry};
 use super::util::{classify_probe_status, extract_frameset_url, matches_configured_parked_patterns};
 
@@ -47,6 +48,19 @@ async fn follow_url_redirects(client: &Client, initial_url: &str) -> (String, Op
     (current_url, None)
 }
 
+fn parse_retry_after_ms(header: Option<&str>) -> u64 {
+    match header {
+        None => RATE_LIMIT_DELAY_DEFAULT_MS,
+        Some(value) => {
+            let trimmed = value.trim();
+            if let Ok(seconds) = trimmed.parse::<u64>() {
+                return seconds * 1000;
+            }
+            RATE_LIMIT_DELAY_DEFAULT_MS
+        }
+    }
+}
+
 pub(crate) fn build_http_client() -> Result<Client, String> {
     let mut default_headers = reqwest::header::HeaderMap::new();
     default_headers.insert(USER_AGENT, reqwest::header::HeaderValue::from_static(APP_USER_AGENT));
@@ -86,8 +100,10 @@ pub(crate) async fn follow_http(
     let mut redirect_chain: Vec<RedirectChainEntry> = Vec::new();
     let mut current_url = format!("https://{domain}");
     let mut allow_http_fallback = true;
+    let mut redirect_count = 0usize;
+    let mut rate_limit_retries = 0usize;
 
-    for _ in 0..=MAX_REDIRECTS {
+    while redirect_count <= MAX_REDIRECTS {
         let response = client
             .get(&current_url)
             .header(ACCEPT, "text/html,*/*")
@@ -129,6 +145,18 @@ pub(crate) async fn follow_http(
 
         let status = response.status();
 
+        if status.as_u16() == 429 && rate_limit_retries < RATE_LIMIT_RETRY_MAX {
+            rate_limit_retries += 1;
+            let retry_after_ms = parse_retry_after_ms(
+                response.headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+            ).min(RATE_LIMIT_DELAY_MAX_MS);
+            sleep(Duration::from_millis(retry_after_ms)).await;
+            continue; // retry same URL without consuming a redirect slot
+        }
+        rate_limit_retries = 0; // reset on any non-429 response
+
         let location = response
             .headers()
             .get(LOCATION)
@@ -154,6 +182,7 @@ pub(crate) async fn follow_http(
                 });
                 current_url = next_url;
                 allow_http_fallback = false;
+                redirect_count += 1;
                 continue;
             }
         }
@@ -193,6 +222,7 @@ pub(crate) async fn follow_http(
                         });
                         current_url = next_url;
                         allow_http_fallback = false;
+                        redirect_count += 1;
                         continue;
                     }
                 }
@@ -217,6 +247,7 @@ pub(crate) async fn follow_http(
                 });
                 current_url = https_url;
                 allow_http_fallback = false;
+                redirect_count += 1;
                 continue;
             }
         }
