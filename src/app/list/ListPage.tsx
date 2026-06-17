@@ -118,6 +118,65 @@ const STATUS_CONFIG: Record<ProbeStatus, { label: string; badge: string; dot: st
   },
 }
 
+const HTTP_STATUS_DESCRIPTIONS: Record<number, string> = {
+  100: '100 Continue: The initial part of a request has been received and the server will not reject the request.',
+  101: '101 Switching Protocols: The server agrees to switch protocols.',
+  200: '200 OK: The request succeeded.',
+  201: '201 Created: The request succeeded and a new resource was created.',
+  202: '202 Accepted: The request has been accepted for processing, but the processing has not been completed.',
+  203: '203 Non-Authoritative Information: The request succeeded but the returned metadata is not exactly the same as would be served by the origin.',
+  204: '204 No Content: The request succeeded but there is no content to send back.',
+  205: '205 Reset Content: The server is asking the client to reset the document view.',
+  206: '206 Partial Content: The server is delivering only part of the resource.',
+  300: '300 Multiple Choices: The request has more than one possible response.',
+  301: '301 Moved Permanently: The requested resource has been permanently moved.',
+  302: '302 Found: The requested resource has been temporarily moved.',
+  303: '303 See Other: The server is redirecting to a different resource as a response to the request.',
+  304: '304 Not Modified: The resource has not been modified since the version specified.',
+  305: '305 Use Proxy: The requested resource must be accessed through a proxy.',
+  307: '307 Temporary Redirect: The server is performing a temporary redirect.',
+  308: '308 Permanent Redirect: The requested resource has been permanently assigned a new URI.',
+  400: '400 Bad Request: The server cannot process the request due to client error.',
+  401: '401 Unauthorized: The client must authenticate itself.',
+  402: '402 Payment Required: The client must provide payment.',
+  403: '403 Forbidden: The server refuses to fulfill the request.',
+  404: '404 Not Found: The server could not find the requested resource.',
+  405: '405 Method Not Allowed: The request method is not allowed for this resource.',
+  406: '406 Not Acceptable: The server cannot produce a response matching the accept headers.',
+  408: '408 Request Timeout: The server timed out waiting for the request.',
+  409: '409 Conflict: The request conflicts with the current state of the server.',
+  410: '410 Gone: The requested resource is no longer available.',
+  411: '411 Length Required: The request did not specify the length of its content.',
+  412: '412 Precondition Failed: A precondition in the request headers failed.',
+  413: '413 Content Too Large: The request body is larger than the server is willing to process.',
+  414: '414 URI Too Long: The URI provided was too long for the server to process.',
+  415: '415 Unsupported Media Type: The request entity has a media type which the server does not support.',
+  416: '416 Range Not Satisfiable: The range specified in the request header cannot be fulfilled.',
+  417: '417 Expectation Failed: The expectation indicated in the Expect header cannot be met.',
+  418: '418 I\'m a Teapot: The server is a teapot (RFC 2324).',
+  421: '421 Misdirected Request: The request was directed to a server unable to produce an authoritative response.',
+  422: '422 Unprocessable Content: The request body contains well-formed data but is semantically incorrect.',
+  423: '423 Locked: The resource that is being accessed is locked.',
+  424: '424 Failed Dependency: The request failed because it depended on another request.',
+  425: '425 Too Early: The server is unwilling to process the request because the request might be replayed.',
+  426: '426 Upgrade Required: The server refuses to perform the request using the current protocol.',
+  428: '428 Precondition Required: The origin server requires the request to be conditional.',
+  429: '429 Too Many Requests: The user has sent too many requests in a given amount of time.',
+  431: '431 Request Header Fields Too Large: The server is unwilling to process the request because its header fields are too large.',
+  451: '451 Unavailable For Legal Reasons: The resource is unavailable for legal reasons.',
+  500: '500 Internal Server Error: The server encountered an unexpected condition.',
+  501: '501 Not Implemented: The server does not support the functionality required to fulfill the request.',
+  502: '502 Bad Gateway: The server, while acting as a gateway, received an invalid response.',
+  503: '503 Service Unavailable: The server is currently unable to handle the request.',
+  504: '504 Gateway Timeout: The server, while acting as a gateway, did not receive a timely response.',
+  505: '505 HTTP Version Not Supported: The server does not support the HTTP version used in the request.',
+  506: '506 Variant Also Negotiates: The server has an internal configuration error.',
+  507: '507 Insufficient Storage: The server does not have enough storage to complete the request.',
+  508: '508 Loop Detected: The server detected an infinite loop in the request.',
+  510: '510 Not Extended: Further extensions to the request are required.',
+  511: '511 Network Authentication Required: The client needs to authenticate to gain network access.',
+}
+
 function normalizeDisplayDomain(domain: string): string {
   const trimmed = domain.trim().toLowerCase()
   if (!trimmed) return ''
@@ -335,8 +394,13 @@ function UrlStatusPill({ code }: { code?: number }) {
     return STATUS_CONFIG.unreachable.badge
   })()
 
+  const description = HTTP_STATUS_DESCRIPTIONS[code] || `HTTP ${code}`
+
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-sm font-semibold ring-1 ${badgeClass}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-sm font-semibold ring-1 ${badgeClass}`}
+      title={description}
+    >
       {code}
     </span>
   )
@@ -484,7 +548,16 @@ function ProbeDetails({
                 <ExternalLink href={step.url} className="break-all text-blue-600 hover:underline">
                   {truncate(step.url, 90)}
                 </ExternalLink>
-                <span className="text-slate-500">({step.responseStatus ?? 'unknown'})</span>
+                {step.responseStatus ? (
+                  <span
+                    className="text-slate-500"
+                    title={HTTP_STATUS_DESCRIPTIONS[step.responseStatus] || `HTTP ${step.responseStatus}`}
+                  >
+                    ({step.responseStatus})
+                  </span>
+                ) : (
+                  <span className="text-slate-500">(unknown)</span>
+                )}
                 {step.serverHeader && <span className="text-slate-500">[{truncate(step.serverHeader, 48)}]</span>}
               </span>
             </div>
