@@ -3,10 +3,10 @@ import {
   classifyProbeStatus,
   dedupeStrings,
   extractFramesetUrl,
+  findMatchingConfiguredParkedPattern,
   isProbeDomainInput,
   isExplicitRequestTimeoutError,
   MAX_REDIRECTS,
-  matchesConfiguredParkedPatterns,
   normalizeDomain,
   normalizeParkedPatterns,
   normalizeProbeBatchConcurrency,
@@ -21,6 +21,7 @@ import type { ParkedPattern, ProbeDomainInput, ProbeErrorKind, ProbeResult, Prob
 
 interface HttpProbeResult {
   status: ProbeStatus
+  parkedPattern?: string
   httpStatus?: number
   redirectChain: RedirectChainEntry[]
   finalUrl?: string
@@ -762,7 +763,8 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
     const bodyText = response.bodyText
 
     const framesetSourceUrl = extractFramesetUrl(finalUrl, contentType, bodyText)
-    const configuredParked = matchesConfiguredParkedPatterns(options?.parkedPatterns, dnsNameServers, bodyText)
+    const configuredParkedPattern = findMatchingConfiguredParkedPattern(options?.parkedPatterns, dnsNameServers, bodyText)
+    const configuredParked = Boolean(configuredParkedPattern)
     let framesetUrl = framesetSourceUrl
     let framesetHttpStatus: number | undefined
 
@@ -780,6 +782,7 @@ async function followHttp(domain: string, dnsNameServers: string[], options?: Pr
         : framesetUrl
           ? 'frameset'
           : classifyProbeStatus(domain, finalUrl, redirectChain, serverHeader, contentType),
+      parkedPattern: configuredParkedPattern,
       httpStatus: resolvedStatus,
       redirectChain,
       finalUrl,
@@ -837,6 +840,7 @@ export async function probeDomain(domainInput: ProbeDomainInput, options?: Probe
     const httpProbe = await followHttp(domain, dns.nameServers, options)
     result.httpMs = Date.now() - httpStartedAt
     result.status = httpProbe.status
+    result.parkedPattern = httpProbe.parkedPattern
     result.httpStatus = httpProbe.httpStatus
     result.redirectChain = httpProbe.redirectChain
     result.finalUrl = httpProbe.finalUrl

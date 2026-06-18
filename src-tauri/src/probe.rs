@@ -96,6 +96,7 @@ async fn probe_domain(domain_input: ProbeDomainInput, parked_patterns: &[types::
         domain_id: domain_input.id,
         domain,
         status: ProbeStatus::Unreachable,
+        parked_pattern: None,
         http_status: None,
         redirect_chain: None,
         final_url: None,
@@ -140,6 +141,7 @@ async fn probe_domain(domain_input: ProbeDomainInput, parked_patterns: &[types::
             let http = follow_http(&result.domain, &dns_name_servers, parked_patterns).await;
             result.http_ms = http_started.elapsed().as_millis() as u64;
             result.status = if http.timed_out { ProbeStatus::Timeout } else { http.status };
+            result.parked_pattern = http.parked_pattern;
             result.http_status = http.http_status;
             if !http.redirect_chain.is_empty() {
                 result.redirect_chain = Some(http.redirect_chain);

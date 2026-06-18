@@ -4,7 +4,7 @@ use tokio::time::{sleep, Duration};
 
 use super::constants::{APP_USER_AGENT, MAX_REDIRECTS, RATE_LIMIT_DELAY_DEFAULT_MS, RATE_LIMIT_DELAY_MAX_MS, RATE_LIMIT_RETRY_MAX, REQUEST_TIMEOUT_MS};
 use super::types::{HttpProbeResult, RedirectChainEntry};
-use super::util::{classify_probe_status, extract_frameset_url, matches_configured_parked_patterns};
+use super::util::{classify_probe_status, extract_frameset_url, find_matching_configured_parked_pattern};
 
 async fn follow_url_redirects(client: &Client, initial_url: &str) -> (String, Option<u16>) {
     let mut current_url = initial_url.to_string();
@@ -83,6 +83,7 @@ pub(crate) async fn follow_http(
         Err(error) => {
             return HttpProbeResult {
                 status: super::types::ProbeStatus::Unreachable,
+                parked_pattern: None,
                 http_status: None,
                 redirect_chain: Vec::new(),
                 final_url: None,
@@ -125,6 +126,7 @@ pub(crate) async fn follow_http(
                     } else {
                         super::types::ProbeStatus::Unreachable
                     },
+                    parked_pattern: None,
                     http_status: None,
                     redirect_chain,
                     final_url: Some(current_url),
@@ -266,8 +268,9 @@ pub(crate) async fn follow_http(
         let body_text = response.text().await.unwrap_or_default();
 
         let frameset_source_url = extract_frameset_url(final_url.as_deref(), &body_text);
-        let configured_parked =
-            matches_configured_parked_patterns(parked_patterns, dns_name_servers, &body_text);
+        let configured_parked_pattern =
+            find_matching_configured_parked_pattern(parked_patterns, dns_name_servers, &body_text);
+        let configured_parked = configured_parked_pattern.is_some();
         let (frameset_url, frameset_http_status) = if let Some(source) = frameset_source_url {
             let (resolved_url, resolved_status) = follow_url_redirects(&client, &source).await;
             (Some(resolved_url), resolved_status)
@@ -289,6 +292,7 @@ pub(crate) async fn follow_http(
                     content_type.as_deref(),
                 )
             },
+            parked_pattern: configured_parked_pattern,
             http_status: Some(resolved_status.as_u16()),
             redirect_chain,
             final_url,
@@ -312,6 +316,7 @@ pub(crate) async fn follow_http(
 
     HttpProbeResult {
         status: super::types::ProbeStatus::Unreachable,
+        parked_pattern: None,
         http_status: None,
         redirect_chain,
         final_url: Some(current_url),

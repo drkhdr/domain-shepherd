@@ -9,6 +9,7 @@ import {
   createProbeFailureResult,
   DEFAULT_PARKED_PATTERNS,
   extractFramesetUrl,
+  findMatchingConfiguredParkedPattern,
   formatProbeProgress,
   getResponseBadgeHttpStatus,
   getDefaultParkedPatterns,
@@ -167,6 +168,7 @@ test('REQ-PROBE-018: default parked patterns stay available and clone safely', (
   assert.deepEqual(DEFAULT_PARKED_PATTERNS, [
     { nsSld: 'udag', responseRegex: 'Diese neue Domain wurde im Kundenauftrag registriert.' },
     { nsSld: 'nic', responseRegex: String.raw`\.tel` },
+    { responseRegex: 'Hier entsteht in Kürze das Projekt' },
   ])
 
   const clonedDefaults = getDefaultParkedPatterns()
@@ -285,5 +287,26 @@ test('REQ-PROBE-027: parseRetryAfterMs parses Retry-After header values', () => 
   const futureDate = new Date(Date.now() + 10_000).toUTCString()
   const parsed = parseRetryAfterMs(futureDate)
   assert.ok(parsed > 0 && parsed <= RATE_LIMIT_DELAY_MAX_MS, `expected delay in (0, ${RATE_LIMIT_DELAY_MAX_MS}], got ${parsed}`)
+})
+
+test('REQ-PROBE-028: parked regex matches HTML-decoded response text', () => {
+  const patterns = normalizeParkedPatterns([{ responseRegex: 'Hier entsteht in Kürze das Projekt' }])
+  assert.equal(patterns.length, 1)
+
+  const htmlWithEntity = '<html><body>Hier entsteht in K&uuml;rze das Projekt</body></html>'
+  assert.equal(matchesConfiguredParkedPatterns(patterns, ['ns1.example.net'], htmlWithEntity), true)
+})
+
+test('REQ-PROBE-029: matching parked pattern text is discoverable', () => {
+  const patterns = normalizeParkedPatterns([
+    { nsSld: 'udag', responseRegex: 'Diese neue Domain wurde im Kundenauftrag registriert' },
+    { responseRegex: 'Hier entsteht in Kürze das Projekt' },
+  ])
+
+  const htmlWithEntity = '<html><body>Hier entsteht in K&uuml;rze das Projekt</body></html>'
+  assert.equal(
+    findMatchingConfiguredParkedPattern(patterns, ['ns1.udag.net'], htmlWithEntity),
+    'Hier entsteht in Kürze das Projekt'
+  )
 })
 

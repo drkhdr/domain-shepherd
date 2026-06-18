@@ -73,7 +73,7 @@ This document is the formal behavior contract for probe logic.
 - Rust WHOIS/RDAP fallback behavior must not fail solely because an RDAP endpoint responds with HTTP redirects that Node follows successfully.
 
 ## REQ-PROBE-018 Default Parked Patterns
-- Default parked patterns must include an `udag` rule for `Diese neue Domain wurde im Kundenauftrag registriert.` and a `nic` rule for `\\.tel`.
+- Default parked patterns must include an `udag` rule for `Diese neue Domain wurde im Kundenauftrag registriert.`, a `nic` rule for `\\.tel`, and a plain-text content rule for `Hier entsteht in Kürze das Projekt`.
 - New settings objects and legacy saved settings that do not yet contain a parked-patterns field must start with those defaults.
 - Explicitly saved parked patterns, including an empty list, must be preserved as-is.
 
@@ -117,3 +117,11 @@ This document is the formal behavior contract for probe logic.
 - The delay must be capped at 30 seconds regardless of the header value.
 - A maximum of 2 rate-limit retries per URL is permitted.
 - Rate-limit retries must not consume redirect slots.
+
+## REQ-PROBE-028 Parked Pattern Matching On HTML-Decoded Text
+- Configured parked patterns must be matched against both the raw response body and an HTML-decoded representation of that body.
+- This must allow plain-text patterns with umlauts and other special characters to match equivalent HTML entities (for example `Kürze` vs `K&uuml;rze`).
+
+## REQ-PROBE-029 Parked Match Pattern Visibility
+- When a domain is classified as `parked` because a configured parked pattern matched, probe results must expose the matching pattern text.
+- The details view must render the line `Recognised as Parked: "<matching pattern>"` before the WHOIS block when such a matching pattern is available.

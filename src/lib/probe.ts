@@ -34,6 +34,7 @@ export interface ProbeResult {
   domainId: string
   domain: string
   status: ProbeStatus
+  parkedPattern?: string
   httpStatus?: number
   redirectChain?: RedirectChainItem[]
   finalUrl?: string
@@ -62,6 +63,7 @@ export interface ParkedPattern {
 export const DEFAULT_PARKED_PATTERNS: ReadonlyArray<ParkedPattern> = [
   { nsSld: 'udag', responseRegex: 'Diese neue Domain wurde im Kundenauftrag registriert.' },
   { nsSld: 'nic', responseRegex: '\\.tel' },
+  { responseRegex: 'Hier entsteht in Kürze das Projekt' },
 ]
 
 export const ICANN_EPP_STATUS_DEFINITIONS: Record<string, string> = {
@@ -444,13 +446,57 @@ export function getDefaultParkedPatterns(): ParkedPattern[] {
   return DEFAULT_PARKED_PATTERNS.map((pattern) => ({ ...pattern }))
 }
 
+function decodeHtmlEntities(value: string): string {
+  if (!value.includes('&')) {
+    return value
+  }
+
+  const named: Record<string, string> = {
+    amp: '&',
+    lt: '<',
+    gt: '>',
+    quot: '"',
+    apos: "'",
+    nbsp: ' ',
+    uuml: 'ü',
+    Uuml: 'Ü',
+    auml: 'ä',
+    Auml: 'Ä',
+    ouml: 'ö',
+    Ouml: 'Ö',
+    szlig: 'ß',
+  }
+
+  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]+);/gi, (match, token: string) => {
+    if (token.startsWith('#x') || token.startsWith('#X')) {
+      const codePoint = Number.parseInt(token.slice(2), 16)
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match
+    }
+
+    if (token.startsWith('#')) {
+      const codePoint = Number.parseInt(token.slice(1), 10)
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match
+    }
+
+    return named[token] ?? named[token.toLowerCase()] ?? match
+  })
+}
+
 export function matchesConfiguredParkedPatterns(
   patterns: ParkedPattern[] | undefined,
   dnsNameServers: string[] | undefined,
   responseBody: string | undefined
 ): boolean {
+  return Boolean(findMatchingConfiguredParkedPattern(patterns, dnsNameServers, responseBody))
+}
+
+export function findMatchingConfiguredParkedPattern(
+  patterns: ParkedPattern[] | undefined,
+  dnsNameServers: string[] | undefined,
+  responseBody: string | undefined
+): string | undefined {
   if (!patterns?.length || !responseBody) {
-    return false
+    return undefined
   }
 
   const nsSlds = new Set<string>()
@@ -465,6 +511,8 @@ export function matchesConfiguredParkedPatterns(
     }
   }
 
+  const decodedBody = decodeHtmlEntities(responseBody)
+
   for (const pattern of patterns) {
     if (pattern.nsSld && !nsSlds.has(pattern.nsSld)) {
       continue
@@ -472,15 +520,15 @@ export function matchesConfiguredParkedPatterns(
 
     try {
       const regex = new RegExp(pattern.responseRegex, 'i')
-      if (regex.test(responseBody)) {
-        return true
+      if (regex.test(responseBody) || (decodedBody !== responseBody && regex.test(decodedBody))) {
+        return pattern.responseRegex
       }
     } catch {
       continue
     }
   }
 
-  return false
+  return undefined
 }
 
 export function normalizeProbeBatchConcurrency(value: unknown): number {

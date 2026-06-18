@@ -26,7 +26,16 @@ import {
   getWhoisStatusDefinition,
   getWhoisStatusFamily,
 } from '@/lib/probe'
-import type { ParkedPattern, ProbeDomainInput, ProbeResult, ProbeStatus, SortDirection, SortKey, TargetStatusFilter } from '@/lib/probe'
+import type {
+  DefaultProbeSettings,
+  ParkedPattern,
+  ProbeDomainInput,
+  ProbeResult,
+  ProbeStatus,
+  SortDirection,
+  SortKey,
+  TargetStatusFilter,
+} from '@/lib/probe'
 import type { WhoisResult } from '@/lib/probe'
 import {
   APP_NAME,
@@ -57,11 +66,7 @@ interface DomainListResponse {
   updatedAt: string
 }
 
-interface ProbeSettings {
-  batchConcurrency: number
-  maxAttempts: number
-  parkedPatterns: ParkedPattern[]
-}
+type ProbeSettings = DefaultProbeSettings
 
 interface TableRow {
   id: string
@@ -210,10 +215,6 @@ function createEmptyList(): DomainListResponse {
   }
 }
 
-function createDefaultSettings(): ProbeSettings {
-  return createDefaultProbeSettings()
-}
-
 function loadLocalList(): DomainListResponse {
   try {
     const raw = localStorage.getItem(LOCAL_LIST_STORAGE_KEY)
@@ -237,7 +238,7 @@ function saveLocalList(nextList: DomainListResponse) {
 function loadLocalSettings(): ProbeSettings {
   try {
     const raw = localStorage.getItem(LOCAL_SETTINGS_STORAGE_KEY)
-    if (!raw) return createDefaultSettings()
+    if (!raw) return createDefaultProbeSettings()
 
     const parsed = JSON.parse(raw) as {
       batchConcurrency?: unknown
@@ -253,7 +254,7 @@ function loadLocalSettings(): ProbeSettings {
         : createDefaultProbeSettings().parkedPatterns,
     }
   } catch {
-    return createDefaultSettings()
+    return createDefaultProbeSettings()
   }
 }
 
@@ -432,8 +433,7 @@ function ProbeDetails({
   const [rawTextOpen, setRawTextOpen] = useState(false)
   const whoisSharePercent = calculateWhoisSharePercent(result.probeMs, result.whoisMs)
   const redirectFull = buildRedirectChainWithFinal(result.redirectChain, result.finalUrl, result.httpStatus, result.serverHeader)
-  const hasWhois = Boolean(
-    whoisLoading ||
+  const hasWhoisData = Boolean(
     result.whois?.registrar ||
       result.whois?.createdAt ||
       result.whois?.updatedAt ||
@@ -565,10 +565,18 @@ function ProbeDetails({
         </div>
       )}
 
-      {hasWhois && (
-        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <p className="mb-1 text-slate-400">WHOIS</p>
-          {whoisLoading && <p className="text-slate-500">Loading WHOIS data...</p>}
+      {result.status === 'parked' && result.parkedPattern && (
+        <div>
+          <span className="text-slate-400">Recognised as Parked: </span>
+          <span className="text-rose-600">"{result.parkedPattern}"</span>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+        <p className="mb-1 text-slate-400">WHOIS</p>
+        {whoisLoading && <p className="text-slate-500">Loading WHOIS data...</p>}
+        {!whoisLoading && !hasWhoisData && <p className="text-slate-500">No WHOIS data available.</p>}
+        {hasWhoisData && (
           <div className="flex flex-wrap gap-x-6 gap-y-1">
             {result.whois?.registrar && (
               <span>
@@ -607,8 +615,9 @@ function ProbeDetails({
               </span>
             )}
           </div>
+        )}
 
-          {(result.whois?.nameServers?.length ?? 0) > 0 && (
+        {(result.whois?.nameServers?.length ?? 0) > 0 && (
             <div className="mt-2">
               <p className="mb-1 text-slate-400">NS</p>
               <div className="flex flex-wrap gap-1.5">
@@ -624,7 +633,7 @@ function ProbeDetails({
             </div>
           )}
 
-          {(result.whois?.statuses?.length ?? 0) > 0 && (
+        {(result.whois?.statuses?.length ?? 0) > 0 && (
             <div className="mt-2">
               <p className="mb-1 text-slate-400">Status</p>
               <div className="space-y-1.5">
@@ -646,13 +655,13 @@ function ProbeDetails({
             </div>
           )}
 
-          {result.whois?.error && (
+        {result.whois?.error && (
             <div className="mt-1 text-rose-600">
               <span className="text-slate-400">WHOIS error: </span>
               {truncate(result.whois.error, 120)}
             </div>
           )}
-          {result.whois?.rawText && (
+        {result.whois?.rawText && (
             <div className="mt-2">
               <button
                 type="button"
@@ -689,8 +698,7 @@ function ProbeDetails({
               )}
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       {result.finalUrl && redirectFull.length <= 1 && (
         <div>
@@ -823,8 +831,8 @@ export function ListPage() {
   const [nsSldFilter, setNsSldFilter] = useState('all')
   const [expandedProbeId, setExpandedProbeId] = useState('')
   const [newDomainsInput, setNewDomainsInput] = useState('')
-  const [settings, setSettings] = useState<ProbeSettings>(createDefaultSettings())
-  const [settingsDraft, setSettingsDraft] = useState<ProbeSettings>(createDefaultSettings())
+  const [settings, setSettings] = useState<ProbeSettings>(createDefaultProbeSettings())
+  const [settingsDraft, setSettingsDraft] = useState<ProbeSettings>(createDefaultProbeSettings())
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const batchConcurrencyError = validateIntegerRange(
@@ -1285,7 +1293,7 @@ export function ListPage() {
   }
 
   function restoreDefaultSettings() {
-    setSettingsDraft(createDefaultSettings())
+    setSettingsDraft(createDefaultProbeSettings())
   }
 
   function addParkedPatternRow() {

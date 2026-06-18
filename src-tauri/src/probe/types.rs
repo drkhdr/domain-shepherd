@@ -69,6 +69,8 @@ pub struct ProbeResult {
     pub(crate) domain: String,
     pub(crate) status: ProbeStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) parked_pattern: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) http_status: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) redirect_chain: Option<Vec<RedirectChainEntry>>,
@@ -121,6 +123,7 @@ pub(crate) struct DnsLookupResult {
 #[derive(Debug)]
 pub(crate) struct HttpProbeResult {
     pub(crate) status: ProbeStatus,
+    pub(crate) parked_pattern: Option<String>,
     pub(crate) http_status: Option<u16>,
     pub(crate) redirect_chain: Vec<RedirectChainEntry>,
     pub(crate) final_url: Option<String>,

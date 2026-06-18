@@ -134,13 +134,82 @@ fn get_name_server_sld_label(name_server_sld: &str) -> String {
         .to_lowercase()
 }
 
-pub(crate) fn matches_configured_parked_patterns(
+fn decode_html_entities(value: &str) -> String {
+    if !value.contains('&') {
+        return value.to_string();
+    }
+
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch != '&' {
+            out.push(ch);
+            continue;
+        }
+
+        let mut entity = String::new();
+        let mut found_end = false;
+        while let Some(next) = chars.peek().copied() {
+            chars.next();
+            if next == ';' {
+                found_end = true;
+                break;
+            }
+            if entity.len() > 20 {
+                break;
+            }
+            entity.push(next);
+        }
+
+        if !found_end {
+            out.push('&');
+            out.push_str(&entity);
+            continue;
+        }
+
+        let decoded = if let Some(hex) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
+            u32::from_str_radix(hex, 16).ok().and_then(char::from_u32)
+        } else if let Some(dec) = entity.strip_prefix('#') {
+            dec.parse::<u32>().ok().and_then(char::from_u32)
+        } else {
+            match entity.as_str() {
+                "amp" => Some('&'),
+                "lt" => Some('<'),
+                "gt" => Some('>'),
+                "quot" => Some('"'),
+                "apos" => Some('\''),
+                "nbsp" => Some(' '),
+                "uuml" => Some('ü'),
+                "Uuml" => Some('Ü'),
+                "auml" => Some('ä'),
+                "Auml" => Some('Ä'),
+                "ouml" => Some('ö'),
+                "Ouml" => Some('Ö'),
+                "szlig" => Some('ß'),
+                _ => None,
+            }
+        };
+
+        if let Some(decoded_char) = decoded {
+            out.push(decoded_char);
+        } else {
+            out.push('&');
+            out.push_str(&entity);
+            out.push(';');
+        }
+    }
+
+    out
+}
+
+pub(crate) fn find_matching_configured_parked_pattern(
     patterns: &[ParkedPattern],
     dns_name_servers: &[String],
     response_body: &str,
-) -> bool {
+) -> Option<String> {
     if patterns.is_empty() || response_body.is_empty() {
-        return false;
+        return None;
     }
 
     let mut ns_slds = HashSet::new();
@@ -157,6 +226,8 @@ pub(crate) fn matches_configured_parked_patterns(
         }
     }
 
+    let decoded_body = decode_html_entities(response_body);
+
     for pattern in patterns {
         if let Some(ns_sld) = &pattern.ns_sld {
             let normalized = ns_sld.trim().to_lowercase().trim_end_matches('.').to_string();
@@ -170,13 +241,15 @@ pub(crate) fn matches_configured_parked_patterns(
             .build();
 
         if let Ok(regex) = regex {
-            if regex.is_match(response_body) {
-                return true;
+            if regex.is_match(response_body)
+                || (decoded_body != response_body && regex.is_match(&decoded_body))
+            {
+                return Some(pattern.response_regex.clone());
             }
         }
     }
 
-    false
+    None
 }
 
 pub(crate) fn dedupe_insertion_order(values: Vec<String>) -> Vec<String> {
